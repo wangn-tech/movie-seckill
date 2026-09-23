@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" font-family="Helvetica,Arial,sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff5f5"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#666"/>
+    </marker>
+  </defs>
+  <rect width="900" height="620" fill="url(#bg)" rx="12"/>
+
+  <text x="450" y="30" text-anchor="middle" font-size="18" font-weight="bold" fill="#c0392b">Movie Seckill 高并发秒杀架构</text>
+
+  <!-- 前端 -->
+  <rect x="350" y="50" width="200" height="44" rx="8" fill="#3b82f6"/>
+  <text x="450" y="77" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">Next.js 14 前端</text>
+
+  <!-- Controller -->
+  <rect x="320" y="120" width="260" height="50" rx="8" fill="#8b5cf6"/>
+  <text x="450" y="142" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Controller + JWT拦截器 + @RateLimit</text>
+  <text x="450" y="160" text-anchor="middle" fill="#ede9fe" font-size="11">ThreadLocal UserContext / 令牌桶限流</text>
+
+  <!-- Service -->
+  <rect x="180" y="210" width="240" height="70" rx="8" fill="#10b981"/>
+  <text x="300" y="235" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">SeckillService 抢座核心</text>
+  <text x="300" y="255" text-anchor="middle" fill="#d1fae5" font-size="11">布隆过滤 → Lua 原子预扣 → 发MQ</text>
+  <text x="300" y="272" text-anchor="middle" fill="#d1fae5" font-size="11">Redis Lua: 幂等+冲突+扣库存+锁座</text>
+
+  <rect x="500" y="210" width="240" height="70" rx="8" fill="#10b981"/>
+  <text x="620" y="235" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">CacheService 多级缓存</text>
+  <text x="620" y="255" text-anchor="middle" fill="#d1fae5" font-size="11">Caffeine L1 → Redis L2 → DB</text>
+  <text x="620" y="272" text-anchor="middle" fill="#d1fae5" font-size="11">逻辑过期+异步重建+布隆过滤</text>
+
+  <!-- Redis -->
+  <rect x="320" y="320" width="260" height="50" rx="8" fill="#ef4444"/>
+  <text x="450" y="342" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Redis 7</text>
+  <text x="450" y="360" text-anchor="middle" fill="#fee2e2" font-size="11">Lua脚本 / 库存 / 座位锁 / 布隆 / 限流</text>
+
+  <!-- MQ -->
+  <rect x="620" y="320" width="200" height="50" rx="8" fill="#f59e0b"/>
+  <text x="720" y="342" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">RocketMQ 5</text>
+  <text x="720" y="360" text-anchor="middle" fill="#fef3c7" font-size="11">削峰 + 定时消息</text>
+
+  <!-- Consumer -->
+  <rect x="500" y="410" width="240" height="60" rx="8" fill="#06b6d4"/>
+  <text x="620" y="435" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">OrderConsumer 异步落单</text>
+  <text x="620" y="455" text-anchor="middle" fill="#cffafe" font-size="11">同事务: order+seat+outbox</text>
+
+  <!-- MySQL -->
+  <rect x="180" y="410" width="240" height="60" rx="8" fill="#6366f1"/>
+  <text x="300" y="435" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">MySQL 8</text>
+  <text x="300" y="455" text-anchor="middle" fill="#e0e7ff" font-size="11">条件更新 WHERE available>=n</text>
+
+  <!-- Job -->
+  <rect x="320" y="510" width="260" height="60" rx="8" fill="#64748b"/>
+  <text x="450" y="535" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">定时任务</text>
+  <text x="450" y="555" text-anchor="middle" fill="#e2e8f0" font-size="11">Outbox投递 / 超时关单 / 库存对账</text>
+
+  <!-- Arrows -->
+  <line x1="450" y1="94" x2="450" y2="118" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="380" y1="170" x2="320" y2="208" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="520" y1="170" x2="580" y2="208" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="300" y1="280" x2="400" y2="318" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="620" y1="280" x2="500" y2="318" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="450" y1="370" x2="450" y2="408" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="580" y1="370" x2="680" y2="408" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="500" y1="440" x2="420" y2="440" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="450" y1="470" x2="450" y2="508" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Legend -->
+  <text x="30" y="590" font-size="11" fill="#666">三层防超卖: Redis Lua → MySQL条件更新 → 唯一索引 | 缓存穿透/击穿/雪崩: 布隆+空值+逻辑过期+TTL随机</text>
+</svg>

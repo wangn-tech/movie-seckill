@@ -2,6 +2,8 @@
 
 > Java 21 + Spring Boot 3 + MyBatis-Plus + MySQL + Redis + RocketMQ + Caffeine + Outbox 高并发秒杀演示项目，用于 Java 后端岗位面试。
 
+![架构图](docs/architecture.svg)
+
 ## 技术亮点
 
 - **Redis + Lua 原子抢座**：一次脚本完成 requestId 幂等、座位冲突检查、库存预扣、座位锁定，杜绝超卖和座位重售
@@ -50,8 +52,9 @@ npm run dev
 │       ├── common/         # Result/异常/ThreadLocal/常量/工具
 │       ├── config/         # Redis/Redisson/Caffeine/MyBatis/Web/Knife4j
 │       ├── controller/     # MVC 的 C
-│       ├── service/         # MVC 的 S
-│       ├── mapper/         # MVC 的 M（MyBatis-Plus）
+│       ├── service/        # 业务接口
+│       │   └── impl/       # 业务实现
+│       ├── mapper/         # MVC 的 M（MyBatis-Plus）+ resources/mapper/*.xml
 │       ├── entity/ dto/ vo/
 │       ├── lua/            # Redis Lua 脚本
 │       ├── mq/              # RocketMQ producer/consumer

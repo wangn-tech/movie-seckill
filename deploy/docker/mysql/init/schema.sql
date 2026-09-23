@@ -3,6 +3,9 @@
 -- MySQL 8.0, 库名 movie_seckill
 -- =====================================================
 
+SET NAMES utf8mb4;
+SET CHARACTER SET utf8mb4;
+
 CREATE DATABASE IF NOT EXISTS movie_seckill
   DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -17,7 +20,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
   balance     INT NOT NULL DEFAULT 100000 COMMENT '模拟余额，单位分，默认1000元',
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) COMMENT='用户表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
 -- ---------- 电影表 ----------
 CREATE TABLE IF NOT EXISTS movie (
@@ -35,7 +38,7 @@ CREATE TABLE IF NOT EXISTS movie (
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_status (status, deleted)
-) COMMENT='电影表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='电影表';
 
 -- ---------- 影院表 ----------
 CREATE TABLE IF NOT EXISTS cinema (
@@ -45,7 +48,7 @@ CREATE TABLE IF NOT EXISTS cinema (
   city        VARCHAR(64),
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) COMMENT='影院表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='影院表';
 
 -- ---------- 场次表（防超卖核心） ----------
 CREATE TABLE IF NOT EXISTS movie_schedule (
@@ -64,7 +67,7 @@ CREATE TABLE IF NOT EXISTS movie_schedule (
   update_time     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_movie_date (movie_id, show_date),
   KEY idx_cinema_date (cinema_id, show_date)
-) COMMENT='场次表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='场次表';
 
 -- ---------- 座位锁定表（防座位重售核心） ----------
 CREATE TABLE IF NOT EXISTS seat_lock (
@@ -79,11 +82,10 @@ CREATE TABLE IF NOT EXISTS seat_lock (
   status      TINYINT DEFAULT 1 COMMENT '1锁定中 0已释放 2已售',
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  -- 核心兜底：同一场次同一座位只能被一人锁
   UNIQUE KEY uk_seat (schedule_id, row_num, col_num),
   KEY idx_schedule_status (schedule_id, status),
   KEY idx_lock_until (lock_until, status)
-) COMMENT='座位锁定表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='座位锁定表';
 
 -- ---------- 订单表 ----------
 CREATE TABLE IF NOT EXISTS ticket_order (
@@ -105,7 +107,7 @@ CREATE TABLE IF NOT EXISTS ticket_order (
   update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_lock_token (lock_token),
   KEY idx_user (user_id, status)
-) COMMENT='订单表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='订单表';
 
 -- ---------- 订单座位明细 ----------
 CREATE TABLE IF NOT EXISTS order_seat (
@@ -117,7 +119,7 @@ CREATE TABLE IF NOT EXISTS order_seat (
   col_num     INT NOT NULL,
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uk_schedule_seat (schedule_id, row_num, col_num)
-) COMMENT='订单座位明细';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='订单座位明细';
 
 -- ---------- Outbox 本地消息表 ----------
 CREATE TABLE IF NOT EXISTS outbox_event (
@@ -131,7 +133,7 @@ CREATE TABLE IF NOT EXISTS outbox_event (
   create_time  DATETIME DEFAULT CURRENT_TIMESTAMP,
   sent_time    DATETIME NULL,
   KEY idx_status_create (status, create_time)
-) COMMENT='Outbox 本地消息表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Outbox 本地消息表';
 
 -- =====================================================
 -- 初始测试数据

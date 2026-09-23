@@ -1,0 +1,80 @@
+package com.wangning.seckill.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.wangning.seckill.common.exception.BizException;
+import com.wangning.seckill.common.exception.ResultCode;
+import com.wangning.seckill.entity.SeatLock;
+import com.wangning.seckill.entity.TicketOrder;
+import com.wangning.seckill.entity.User;
+import com.wangning.seckill.mapper.SeatLockMapper;
+import com.wangning.seckill.mapper.TicketOrderMapper;
+import com.wangning.seckill.mapper.UserMapper;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+
+/**
+ * 模拟支付服务。
+ *
+ * <p>支付链路：余额扣减(CAS) → 订单状态 CAS 0→1 → seat_lock 1→2 已售。
+ * 全部在一个事务里，失败回滚。
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class PaymentService {
+
+    private final TicketOrderMapper orderMapper;
+    private final UserMapper userMapper;
+    private final SeatLockMapper seatLockMapper;
+
+    @Transactional(rollbackFor = Exception.class)
+    public void pay(Long userId, String orderNo) {
+        // 1. 查订单
+        TicketOrder order = orderMapper.selectOne(
+                new LambdaQueryWrapper<TicketOrder>()
+                        .eq(TicketOrder::getOrderNo, orderNo)
+                        .eq(TicketOrder::getUserId, userId));
+        if (order == null) {
+            throw new BizException(ResultCode.ORDER_NOT_FOUND);
+        }
+        if (order.getStatus() != 0) {
+            throw new BizException(ResultCode.ORDER_STATUS_ILLEGAL);
+        }
+
+        // 2. CAS 扣余额：WHERE balance >= totalPrice
+        int cents = order.getTotalPrice().multiply(new java.math.BigDecimal(100)).intValue();
+        int balanceUpdated = userMapper.update(null,
+                new LambdaUpdateWrapper<User>()
+                        .setSql("balance = balance - " + cents)
+                        .eq(User::getId, userId)
+                        .ge(User::getBalance, cents));
+        if (balanceUpdated == 0) {
+            throw new BizException(ResultCode.BALANCE_NOT_ENOUGH);
+        }
+
+        // 3. CAS 更新订单状态：0→1
+        int orderUpdated = orderMapper.update(null,
+                new LambdaUpdateWrapper<TicketOrder>()
+                        .eq(TicketOrder::getId, order.getId())
+                        .eq(TicketOrder::getStatus, 0)
+                        .set(TicketOrder::getStatus, 1)
+                        .set(TicketOrder::getPayTime, LocalDateTime.now()));
+        if (orderUpdated == 0) {
+            throw new BizException(ResultCode.ORDER_STATUS_ILLEGAL);
+        }
+
+        // 4. seat_lock 标记已售
+        seatLockMapper.update(null,
+                new LambdaUpdateWrapper<SeatLock>()
+                        .eq(SeatLock::getScheduleId, order.getScheduleId())
+                        .eq(SeatLock::getOrderNo, orderNo)
+                        .set(SeatLock::getStatus, 2));
+
+        log.info("支付成功 orderNo={}, userId={}", orderNo, userId);
+    }
+}

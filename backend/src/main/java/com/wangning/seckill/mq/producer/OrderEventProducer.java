@@ -1,5 +1,6 @@
 package com.wangning.seckill.mq.producer;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.seckill.dto.SeckillReq;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 订单事件 Producer：抢座成功后发 MQ，异步落单。
@@ -20,6 +22,7 @@ import java.util.List;
 public class OrderEventProducer {
 
     private final DefaultMQProducer producer;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${seckill.mq.topic-order-delay:seckill-order-delay-topic}")
     private String delayTopic;
@@ -29,10 +32,13 @@ public class OrderEventProducer {
      */
     public void sendOrderCreated(String topic, Long userId, Long scheduleId,
                                  List<SeckillReq.Seat> seats, String requestId) {
-        String body = String.format(
-                "{\"userId\":%d,\"scheduleId\":%d,\"requestId\":\"%s\",\"seats\":%s}",
-                userId, scheduleId, requestId, seats.toString());
         try {
+            String body = objectMapper.writeValueAsString(Map.of(
+                    "userId", userId,
+                    "scheduleId", scheduleId,
+                    "requestId", requestId,
+                    "seats", seats
+            ));
             Message msg = new Message(topic, "ORDER_CREATED",
                     requestId, body.getBytes(StandardCharsets.UTF_8));
             producer.send(msg);

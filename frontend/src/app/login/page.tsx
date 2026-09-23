@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const [account, setAccount] = useState('13800000001');
@@ -27,6 +28,9 @@ export default function LoginPage() {
       <input className="w-full border p-2 mb-4 rounded" type="password" placeholder="密码" value={password} onChange={(e) => setPassword(e.target.value)} />
       <button onClick={login} className="w-full bg-red-600 text-white p-2 rounded">登录</button>
       <div className="text-sm text-gray-500 mt-3">测试账号: 13800000001 / 13800000002, 密码 123456</div>
+      <div className="text-sm text-gray-500 mt-2 text-center">
+        没有账号？<Link href="/register" className="text-red-600">去注册</Link>
+      </div>
     </div>
   );
 }

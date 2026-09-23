@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wangning.seckill.mapper.ScheduleMapper">
+
+    <!--
+      库存对账查询：查所有在售票次的 DB 库存，用于和 Redis 对比校准。
+      面试点：Redis 是预扣层，MySQL available_seats 是最终库存，定时任务跑这个查询做对账。
+    -->
+    <select id="listActiveSchedules" resultType="com.wangning.seckill.entity.Schedule">
+        SELECT id, movie_id, cinema_id, total_seats, available_seats, price, status
+        FROM movie_schedule
+        WHERE status = 1
+          AND available_seats >= 0
+    </select>
+
+    <!--
+      条件更新库存：WHERE available_seats &gt;= #{count} 兜底超卖。
+      面试点：这是三层防超卖的第二层，Redis Lua 挡流量，这里是 DB 层最终判断。
+    -->
+    <update id="deductStock" parameterType="map">
+        UPDATE movie_schedule
+        SET available_seats = available_seats - #{count},
+            version = version + 1
+        WHERE id = #{scheduleId}
+          AND available_seats >= #{count}
+    </update>
+
+</mapper>

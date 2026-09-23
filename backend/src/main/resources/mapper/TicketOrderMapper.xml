@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wangning.seckill.mapper.TicketOrderMapper">
+
+    <!--
+      用户订单列表（带场次信息）。
+      面试点：复杂关联查询用 XML 写，BaseMapper 不擅长 join。
+    -->
+    <select id="selectOrdersByUser" resultType="com.wangning.seckill.entity.TicketOrder">
+        SELECT o.*
+        FROM ticket_order o
+        WHERE o.user_id = #{userId}
+          AND o.deleted = 0
+        ORDER BY o.create_time DESC
+    </select>
+
+    <!--
+      订单状态 CAS：只有 status = #{expect} 才能改成 #{target}。
+      面试点：支付/关单都用这个做乐观并发控制，防止重复支付/重复关单。
+    -->
+    <update id="casUpdateStatus" parameterType="map">
+        UPDATE ticket_order
+        SET status = #{target},
+            pay_time = CASE WHEN #{target} = 1 THEN NOW() ELSE pay_time END
+        WHERE order_no = #{orderNo}
+          AND user_id = #{userId}
+          AND status = #{expect}
+    </update>
+
+    <!-- 统计某场次已售票数 -->
+    <select id="countSoldBySchedule" resultType="int">
+        SELECT COUNT(*)
+        FROM ticket_order
+        WHERE schedule_id = #{scheduleId}
+          AND status = 1
+    </select>
+
+</mapper>

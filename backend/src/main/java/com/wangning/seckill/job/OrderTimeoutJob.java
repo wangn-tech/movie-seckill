@@ -1,5 +1,14 @@
 package com.wangning.seckill.job;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.wangning.seckill.common.constant.CacheKeyConstants;
+import com.wangning.seckill.entity.OrderSeat;
+import com.wangning.seckill.entity.TicketOrder;
+import com.wangning.seckill.mapper.OrderSeatMapper;
+import com.wangning.seckill.mapper.TicketOrderMapper;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -19,20 +28,17 @@ import java.util.List;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class OrderTimeoutJob {
 
     private final TicketOrderMapper orderMapper;
     private final OrderSeatMapper orderSeatMapper;
     private final StringRedisTemplate redis;
 
-    private final DefaultRedisScript<Long> releaseScript;
+    private DefaultRedisScript<Long> releaseScript;
 
-    public OrderTimeoutJob(TicketOrderMapper orderMapper,
-                           OrderSeatMapper orderSeatMapper,
-                           StringRedisTemplate redis) {
-        this.orderMapper = orderMapper;
-        this.orderSeatMapper = orderSeatMapper;
-        this.redis = redis;
+    @PostConstruct
+    public void init() {
         this.releaseScript = new DefaultRedisScript<>();
         this.releaseScript.setScriptSource(new ResourceScriptSource(new ClassPathResource("lua/seat_release.lua")));
         this.releaseScript.setResultType(Long.class);
@@ -55,7 +61,7 @@ public class OrderTimeoutJob {
                             .eq(TicketOrder::getStatus, 0)
                             .set(TicketOrder::getStatus, 2));
             if (updated == 0) {
-                continue; // 已被其他线程处理
+                continue;
             }
 
             // Lua 返还 Redis 库存（一次性凭证防重复返还）

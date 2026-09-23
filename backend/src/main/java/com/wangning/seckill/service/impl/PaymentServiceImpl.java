@@ -49,8 +49,11 @@ public class PaymentServiceImpl implements PaymentService {
             throw new BizException(ResultCode.ORDER_STATUS_ILLEGAL);
         }
 
-        // 2. CAS 扣余额
-        int cents = order.getTotalPrice().multiply(BigDecimal.valueOf(100)).intValue();
+        // 2. CAS 扣余额（元转分，四舍五入，避免精度丢失）
+        int cents = order.getTotalPrice()
+                .multiply(BigDecimal.valueOf(100))
+                .setScale(0, java.math.RoundingMode.HALF_UP)
+                .intValueExact();
         int balanceUpdated = userMapper.update(null,
                 new LambdaUpdateWrapper<User>()
                         .setSql("balance = balance - " + cents)

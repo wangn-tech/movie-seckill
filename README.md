@@ -30,9 +30,9 @@
 ```bash
 # 1. 启动中间件（MySQL/Redis/RocketMQ）
 cp .env.example .env
-docker compose -f deploy/docker/compose.infra.yml up -d
+bash deploy/scripts/start-infra.sh
 
-# 2. 启动后端（本地开发）
+# 2. 启动后端（本地开发，连宿主机 Docker 映射端口）
 cd backend
 mvn spring-boot:run
 # 访问 http://localhost:8080/doc.html 查看接口
@@ -43,6 +43,8 @@ npm install
 npm run dev
 # 访问 http://localhost:3000
 ```
+
+**测试账号**：`13800000001` / `13800000002`，密码 `123456`
 
 ## 项目结构
 

@@ -34,6 +34,12 @@ public class JwtUtil {
 
     @PostConstruct
     public void init() {
+        if (secret == null || secret.length() < 32) {
+            throw new IllegalStateException("seckill.jwt.secret 必须配置且至少 32 字符");
+        }
+        if (secret.contains("change-me") || secret.contains("dev-secret")) {
+            log.warn("⚠️  使用了默认 JWT secret，生产环境必须通过环境变量 JWT_SECRET 覆盖！");
+        }
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 

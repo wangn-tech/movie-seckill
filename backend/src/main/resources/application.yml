@@ -41,3 +41,13 @@ logging:
   level:
     com.wangning.seckill: info
     org.springframework.data.redis: warn
+
+# Actuator 健康检查
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized

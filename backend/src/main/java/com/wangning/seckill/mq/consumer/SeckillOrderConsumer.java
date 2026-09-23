@@ -47,6 +47,7 @@ public class SeckillOrderConsumer implements RocketMQListener<String> {
     private final ObjectMapper objectMapper;
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void onMessage(String message) {
         try {
             JsonNode node = objectMapper.readTree(message);
@@ -64,7 +65,6 @@ public class SeckillOrderConsumer implements RocketMQListener<String> {
         }
     }
 
-    @Transactional(rollbackFor = Exception.class)
     public void doCreateOrder(Long userId, Long scheduleId, String requestId,
                               List<int[]> seats, String rawMsg) {
         // 1. 幂等

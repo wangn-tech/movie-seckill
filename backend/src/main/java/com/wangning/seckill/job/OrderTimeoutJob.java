@@ -1,13 +1,5 @@
 package com.wangning.seckill.job;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import com.wangning.seckill.common.constant.CacheKeyConstants;
-import com.wangning.seckill.entity.TicketOrder;
-import com.wangning.seckill.mapper.TicketOrderMapper;
-import com.wangning.seckill.mapper.OrderSeatMapper;
-import com.wangning.seckill.entity.OrderSeat;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -27,7 +19,6 @@ import java.util.List;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class OrderTimeoutJob {
 
     private final TicketOrderMapper orderMapper;

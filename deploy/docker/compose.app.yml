@@ -1,0 +1,86 @@
+# Maoyan application stack: backend, frontend and the web entrypoint.
+# The external maoyan-net network is created by compose.infra.yml.
+
+services:
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: maoyan-backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      MYSQL_HOST: mysql
+      MYSQL_USER: ${MYSQL_USER:-maoyan}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      ROCKETMQ_NAMESRV: rocketmq-namesrv:9876
+      JAVA_OPTS: "-Xms128m -Xmx200m -XX:+UseSerialGC -XX:MaxMetaspaceSize=96m -Xss256k"
+    mem_limit: 350m
+    expose:
+      - "8080"
+    networks:
+      - maoyan-net
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+      network: ${DOCKER_BUILD_NETWORK:-default}
+      args:
+        BACKEND_URL: http://backend:8080
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+    container_name: maoyan-frontend
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: http://backend:8080
+      NODE_OPTIONS: "--max-old-space-size=96"
+    mem_limit: 128m
+    expose:
+      - "3000"
+    depends_on:
+      - backend
+    networks:
+      - maoyan-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: maoyan-nginx
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - certbot-webroot:/var/www/certbot:ro
+      - certbot-certs:/etc/letsencrypt:ro
+    mem_limit: 32m
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - maoyan-net
+
+  certbot:
+    image: certbot/certbot
+    container_name: maoyan-certbot
+    profiles:
+      - prod
+    restart: unless-stopped
+    volumes:
+      - certbot-webroot:/var/www/certbot
+      - certbot-certs:/etc/letsencrypt
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done'"
+    networks:
+      - maoyan-net
+
+volumes:
+  certbot-webroot:
+  certbot-certs:
+
+networks:
+  maoyan-net:
+    external: true
+    name: maoyan-net

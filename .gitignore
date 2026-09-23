@@ -1,6 +1,9 @@
 # Compiled class file
 *.class
 
+# Maven build output
+target/
+
 # Log file
 *.log
 
@@ -22,3 +25,19 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# Local environment files and secrets
+.env
+.env.*
+!.env.example
+
+# IDE settings
+.idea/
+.vscode/
+*.iws
+*.iml
+*.ipr
+
+# Operating system metadata
+.DS_Store
+Thumbs.db

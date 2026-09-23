@@ -1,0 +1,132 @@
+# Maoyan infrastructure stack: MySQL, Redis and RocketMQ.
+# Start this stack before deploy/docker/compose.app.yml.
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: maoyan-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-maoyan}
+      MYSQL_USER: ${MYSQL_USER:-maoyan}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max-connections=100
+      - --innodb-buffer-pool-size=96M
+      - --innodb-log-buffer-size=8M
+      - --key-buffer-size=16M
+      - --tmp-table-size=16M
+      - --max-heap-table-size=16M
+      - --table-open-cache=200
+      - --performance-schema=OFF
+    mem_limit: 350m
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks:
+      - maoyan-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: maoyan-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 48mb --maxmemory-policy allkeys-lru
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - maoyan-net
+
+  rocketmq-init:
+    image: alpine:3.20
+    container_name: maoyan-rocketmq-init
+    user: "0:0"
+    network_mode: none
+    command: sh -c "chown -R 3000:3000 /namesrv-logs /broker-data /broker-logs"
+    volumes:
+      - rocketmq-namesrv-data:/namesrv-logs
+      - rocketmq-broker-data:/broker-data
+      - rocketmq-broker-logs:/broker-logs
+    restart: "no"
+
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.1.4
+    container_name: rocketmq-namesrv
+    command: sh mqnamesrv
+    restart: unless-stopped
+    environment:
+      JAVA_OPT_EXT: "-Xms64m -Xmx128m -Xmn32m -XX:MaxDirectMemorySize=64m"
+    ports:
+      - "9876:9876"
+    volumes:
+      - rocketmq-namesrv-data:/home/rocketmq/logs
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9876'"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+    depends_on:
+      rocketmq-init:
+        condition: service_completed_successfully
+    networks:
+      - maoyan-net
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.1.4
+    container_name: rocketmq-broker
+    command: sh mqbroker -n rocketmq-namesrv:9876 -c /home/rocketmq/conf/broker.conf
+    restart: unless-stopped
+    ports:
+      - "10911:10911"
+      - "10909:10909"
+    environment:
+      NAMESRV_ADDR: rocketmq-namesrv:9876
+      JAVA_OPT_EXT: "-Xms128m -Xmx256m -Xmn64m -XX:MaxDirectMemorySize=128m"
+    volumes:
+      - rocketmq-broker-data:/home/rocketmq/data
+      - rocketmq-broker-logs:/home/rocketmq/logs
+      - ./rocketmq/broker.conf:/home/rocketmq/conf/broker.conf:ro
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/10911'"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+    depends_on:
+      rocketmq-init:
+        condition: service_completed_successfully
+      rocketmq-namesrv:
+        condition: service_healthy
+    networks:
+      - maoyan-net
+
+volumes:
+  mysql-data:
+  redis-data:
+  rocketmq-namesrv-data:
+  rocketmq-broker-data:
+  rocketmq-broker-logs:
+
+networks:
+  maoyan-net:
+    name: maoyan-net
+    driver: bridge

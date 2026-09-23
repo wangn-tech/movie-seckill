@@ -30,7 +30,7 @@ public class OutboxRelayJob {
     private final DefaultMQProducer producer;
 
     /** 每 2 秒扫一次 */
-    @Scheduled(fixedDelay = 2000)
+    @Scheduled(fixedDelay = 2000, initialDelay = 10_000)
     public void relay() {
         List<OutboxEvent> pending = outboxMapper.selectList(
                 new LambdaQueryWrapper<OutboxEvent>()

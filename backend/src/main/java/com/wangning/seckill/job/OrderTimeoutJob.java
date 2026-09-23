@@ -45,7 +45,7 @@ public class OrderTimeoutJob {
     }
 
     /** 每分钟扫一次 */
-    @Scheduled(fixedDelay = 60_000)
+    @Scheduled(fixedDelay = 60_000, initialDelay = 30_000)
     public void closeTimeoutOrders() {
         List<TicketOrder> timeoutOrders = orderMapper.selectList(
                 new LambdaQueryWrapper<TicketOrder>()

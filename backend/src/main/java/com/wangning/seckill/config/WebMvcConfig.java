@@ -32,6 +32,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .excludePathPatterns(
                         "/health",
                         "/auth/**",
+                        "/movies/**",
+                        "/cinemas/**",
+                        "/schedules/**",
                         "/doc.html",
                         "/webjars/**",
                         "/v3/api-docs/**",

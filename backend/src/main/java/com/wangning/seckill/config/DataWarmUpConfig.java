@@ -34,19 +34,24 @@ public class DataWarmUpConfig {
     @Bean
     public ApplicationRunner warmUp() {
         return args -> {
-            // 灌电影 ID
-            List<Movie> movies = movieMapper.selectList(new LambdaQueryWrapper<>());
-            movies.forEach(m -> bloom.addMovie(m.getId()));
-            log.info("布隆过滤器灌入电影 ID {} 个", movies.size());
+            try {
+                // 灌电影 ID
+                List<Movie> movies = movieMapper.selectList(new LambdaQueryWrapper<>());
+                movies.forEach(m -> bloom.addMovie(m.getId()));
+                log.info("布隆过滤器灌入电影 ID {} 个", movies.size());
 
-            // 灌场次 ID + 预热库存
-            List<Schedule> schedules = scheduleMapper.selectList(new LambdaQueryWrapper<>());
-            schedules.forEach(s -> {
-                bloom.addSchedule(s.getId());
-                redis.opsForValue().set(CacheKeyConstants.stockKey(s.getId()),
-                        String.valueOf(s.getAvailableSeats()));
-            });
-            log.info("布隆过滤器灌入场次 ID {} 个，库存已预热", schedules.size());
+                // 灌场次 ID + 预热库存
+                List<Schedule> schedules = scheduleMapper.selectList(new LambdaQueryWrapper<>());
+                schedules.forEach(s -> {
+                    bloom.addSchedule(s.getId());
+                    redis.opsForValue().set(CacheKeyConstants.stockKey(s.getId()),
+                            String.valueOf(s.getAvailableSeats()));
+                });
+                log.info("布隆过滤器灌入场次 ID {} 个，库存已预热", schedules.size());
+            } catch (Exception e) {
+                // 预热失败不阻断启动，数据会在首次访问时加载
+                log.warn("启动预热失败（不影响启动）: {}", e.getMessage());
+            }
         };
     }
 }

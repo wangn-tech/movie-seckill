@@ -63,6 +63,9 @@ public class PaymentServiceImpl implements PaymentService {
         if (order.getStatus() != 0) {
             throw new BizException(ResultCode.ORDER_STATUS_ILLEGAL);
         }
+        if (order.getExpireTime() == null || order.getExpireTime().isBefore(LocalDateTime.now())) {
+            throw new BizException(ResultCode.ORDER_STATUS_ILLEGAL, "订单已超时，请重新选座");
+        }
 
         // 2. CAS 扣余额（元转分，四舍五入，避免精度丢失）
         int cents = order.getTotalPrice()

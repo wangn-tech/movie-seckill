@@ -18,10 +18,7 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public List<OrderVO> myOrders(Long userId) {
-        return orderMapper.selectList(
-                new LambdaQueryWrapper<TicketOrder>()
-                        .eq(TicketOrder::getUserId, userId)
-                        .orderByDesc(TicketOrder::getCreateTime)).stream()
+        return orderMapper.selectOrdersByUser(userId).stream()
                 .map(OrderVO::from)
                 .toList();
     }

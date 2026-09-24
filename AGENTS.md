@@ -1,172 +1,97 @@
 # AGENTS.md
 
-本文件为 AI 编码 Agent（Codex / Cursor / Claude Code 等）提供接手本仓库所需的上下文。修改代码前请先读完本文件。
+本文件为 AI 编码 Agent（Codex / Cursor / Claude Code 等）提供本仓库的事实来源。修改代码前必须先阅读本文件；代码、测试与文档不一致时，以可验证的代码和测试结果为准。
 
-## 项目概述
+## 工具链
 
-电影票高并发秒杀系统。核心目标：在单机部署下，通过 Redis + Lua + MQ + Outbox 模式支撑抢座请求，不超卖、不丢单、可补偿。
+- 后端：Java 21、Spring Boot 3.3.5、Maven 3.9+
+- Maven：`/opt/apache-maven-3.9.11/bin/mvn`
+- Maven settings：`/opt/apache-maven-3.9.11/conf/settings.xml`
+- Maven 本地仓库：`/opt/maven-repository`
+- 前端：Next.js 14、React 18、TypeScript、Tailwind CSS
+- 基础设施：MySQL 8、Redis 7、RocketMQ 5、Docker Compose
 
-- 仓库：`wangn-tech/movie-seckill`
-- 主分支：`main`
-- 语言：Java 21 + TypeScript (Next.js)
-- 作者：wangn
+## 项目定位
 
-## 技术栈
+这是一个用于 Java 后端面试演示的电影票高并发抢座系统。核心目标是通过 Caffeine + Redis 多级缓存、Redisson、Redis Lua、RocketMQ 和 Outbox 展示缓存治理、限流、幂等、防超卖及最终一致性。
 
-### 后端 `backend/`
-- **Spring Boot 3.3.5** (Java 21, Maven)
-- **MyBatis-Plus 3.5.7** — ORM，Mapper 在 `backend/src/main/java/com/wangning/seckill/mapper/`，XML 在 `backend/src/main/resources/mapper/`
-- **MySQL 8** — 业务库 `movie_seckill`
-- **Redis 7 + Redisson 3.32** — 库存扣减（Lua 脚本）、分布式锁、布隆过滤器、本地 Caffeine 二级缓存
-- **RocketMQ** — 异步落单（可选，未启动时用 `RocketmqFallbackConfig` 兜底）
-- **JJWT** — JWT 双 Token（access + refresh）
-- **Lombok** — 用 `@RequiredArgsConstructor` 构造注入，**不要**手写 setter 或字段 `@Autowired`
-- **Knife4j** — API 文档 `/doc.html`
+核心演示链路：登录 → 浏览电影 → 选择影院/场次 → 选座 → 抢座排队 → MQ 异步落单 → 模拟支付 → 查询订单。
 
-### 前端 `frontend/`
-- **Next.js 14.2** (App Router, TypeScript)
-- **React 18** + **Zustand**（状态管理）
-- **Axios** — 已封装拦截器，401 自动刷新 token
-- **Tailwind CSS 3.4**
+## 目录
 
-### 部署 `deploy/`
-- `deploy/docker/compose.infra.yml` — MySQL / Redis / RocketMQ 中间件
-- `deploy/docker/compose.app.yml` — 应用容器
-- `deploy/docker/mysql/init/schema.sql` — 建表 + 初始数据
-- `deploy/scripts/start-infra.sh` — 一键启动中间件并健康检查
+- `backend/`：Spring Boot MVC 单体服务
+- `frontend/`：Next.js App Router 前端
+- `deploy/docker/`：MySQL、Redis、RocketMQ、应用与 Nginx
+- `deploy/scripts/`：启动、检查、重置脚本
+- `tests/performance/`：Docker 化 k6 压测与一致性校验
+- `docs/`：实施计划、开发文档、架构设计、面试讲解与压测报告
 
-## 目录结构
+## 后端架构约束
 
-```
-movie-seckill/
-├── backend/
-│   └── src/main/java/com/wangning/seckill/
-│       ├── common/        # Result、BizException、ResultCode、ThreadLocal、常量
-│       ├── config/        # Redis、Redisson、Caffeine、MyBatis、Web、Knife4j、RocketmqFallback
-│       ├── controller/    # MVC C 层
-│       ├── service/       # 业务接口
-│       │   └── impl/      # 业务实现（业务逻辑都在 impl）
-│       ├── mapper/        # MyBatis-Plus Mapper 接口
-│       ├── entity/        # DB 实体（MyBatis-Plus 注解）
-│       ├── dto/           # 请求 DTO
-│       ├── vo/            # 响应 VO
-│       ├── lua/           # Redis Lua 脚本（库存扣减原子操作）
-│       ├── job/           # 定时任务：OrderTimeoutJob、OutboxRelayJob
-│       └── mq/
-│           ├── producer/   # MQ 消息发送
-│           └── consumer/  # SeckillOrderConsumer 异步落单
-├── frontend/
-│   └── src/app/           # Next.js App Router 页面
-├── deploy/
-│   ├── docker/            # compose 文件 + MySQL init SQL
-│   └── scripts/           # 启动脚本
-├── docs/                  # 架构设计、开发文档、面试讲解手册
-└── tests/performance/     # 压测脚本和报告
-```
+- 分层固定为 Controller → Service → Mapper；Controller 不得直接注入 Mapper。
+- Controller 返回 `Result<T>`，输入使用 DTO，输出使用 VO，不直接暴露数据库实体。
+- 写操作使用 `@Transactional(rollbackFor = Exception.class)`；不要依赖同类方法自调用触发事务或 `@Async`。
+- 依赖注入使用构造注入和 `@RequiredArgsConstructor`，禁止字段 `@Autowired`。
+- 金额使用 `BigDecimal`；余额分/元换算必须显式舍入并使用 `intValueExact()`。
+- 日志使用 Slf4j，不使用 `System.out`，日志中不得记录密码、Token 或 Cookie。
 
-## 本地启动
+## 缓存与 Redisson
 
-### 前置
-- JDK 21、Maven 3.9+、Node 18+、Docker（可选，用于中间件）
+- Caffeine 是 JVM 内 L1，只缓存电影、影院、场次等读多写少数据；库存、座位、订单和处理状态不得进入 L1。
+- 读取路径为 Caffeine L1 → Redis L2 → MySQL；写操作按需同时失效 L1/L2。
+- Redisson `RBloomFilter` 用于合法 movieId/scheduleId 防穿透，启动预热并在新增数据时更新。
+- Redisson `RLock` 只用于多实例缓存重建；拿锁后必须再次检查 Redis，避免重复回源。
+- 抢座禁止使用 Redisson 分布式锁，必须使用 Redis Lua 一次性原子完成冲突检查与库存预扣。
 
-### 1. 启动中间件
-```bash
-bash deploy/scripts/start-infra.sh
-# 或手动：docker compose -f deploy/docker/compose.infra.yml up -d
-```
+## 抢座不变量
 
-### 2. 启动后端
-```bash
-cd backend
-mvn spring-boot:run
-# 端口 8080，profile=dev
-```
-- 若本地没有 RocketMQ，加 JVM 参数：`--rocketmq.consumer.enabled=false`
-- `RocketmqFallbackConfig` 会自动提供 fallback producer，不影响编译
+- API 座位坐标从 1 开始。
+- 单次选座不设人为数量上限，但必须非空、无重复、在布局边界内且不是过道或不可售位置。
+- `seatRows`/`seatCols` 只表示布局边界；`totalSeats` 是有效可售座位数，不等于 `rows × cols`。
+- requestId 是幂等键；相同 requestId 只有在用户、场次和座位指纹完全一致时才能幂等成功。
+- `ticket_order.lock_token` 和 Outbox `event_key` 均有唯一约束。
+- Redis Lua 是流量入口，MySQL 条件更新和 `seat_lock` 唯一键是最终兜底。
+- 抢座接口只写入入口 Outbox，不同步等待 MQ；MQ Consumer 在单事务内完成订单落库。
+- 支付和超时关单通过 Outbox 事件确认或释放 Redis 座位，所有补偿必须幂等。
 
-### 3. 启动前端
-```bash
-cd frontend
-npm install
-npm run dev
-# 端口 3000
-```
+## 前端约束
 
-### 测试账号
-- 手机号：`13800000001` / `13800000002`
-- 密码：`123456`
+- 页面放在 `src/app/`，共享组件放在 `src/components/`，API 类型放在 `src/types/`。
+- 所有请求统一使用 `src/lib/api.ts`；核心业务代码禁止使用 `any`。
+- 使用 SWR 做客户端请求去重与刷新；互不依赖的请求应并行发起。
+- 大座位图用 `Set`/`Map` 查询状态，避免每个格子反复遍历数组。
+- 基于现有 Tailwind 体系实现简洁红白商业风格，不引入重量级 UI 框架。
 
-## 核心架构：抢座链路
-
-```
-用户点击抢座
-  → 网关/拦截器：JWT 校验 + 限流（令牌桶）
-  → SeckillController.seize()
-    → 布隆过滤器判断 scheduleId 是否存在（防穿透）
-    → Redis Lua 脚本原子扣库存 + 座位占用
-       （脚本在 backend/src/main/resources/lua/）
-    → 写 outbox_event 表（PENDING 状态，同事务）
-    → 同步发送 MQ（失败不阻断，由 OutboxRelayJob 兜底）
-  → 返回 requestId 给前端
-
-SeckillOrderConsumer 消费 MQ
-  → MySQL 事务落单：ticket_order + order_seat + seat_lock + 条件更新 available_seats
-  → OutboxRelayJob 每 2 秒轮询 outbox_event，重试发送
-```
-
-**关键不变量：**
-- Redis Lua 是库存扣减的唯一权威来源，MySQL 是兜底
-- 座位防重：`seat_lock` 表唯一键 `(schedule_id, row_num, col_num)`
-- 订单幂等：`ticket_order` 表唯一键 `uk_lock_token = requestId`
-- 金额一律用 `BigDecimal`，分/元换算用 `setScale(HALF_UP)` + `intValueExact()`
-
-## 代码约定
-
-### 后端
-- **构造注入**：用 `@RequiredArgsConstructor` + `private final` 字段，**禁止**字段 `@Autowired`
-- **分层**：Controller → Service（接口）→ ServiceImpl → Mapper。Controller 不直接注入 Mapper
-- **统一返回**：所有 Controller 返回 `Result<T>`，业务异常抛 `BizException(ResultCode.XXX, msg)`
-- **异常映射**：`GlobalExceptionHandler` 统一把 BizException 映射到正确 HTTP 状态码
-- **事务**：写操作在 ServiceImpl 方法上加 `@Transactional(rollbackFor = Exception.class)`
-- **Mapper XML**：复杂 SQL 写在 `resources/mapper/`，简单 CRUD 用 MyBatis-Plus LambdaQueryWrapper
-- **配置**：profile 在 `application-dev.yml` / `application-prod.yml` / `application-docker.yml`
-- **日志**：用 `@Slf4j`，不要用 System.out
-
-### 前端
-- **App Router**：页面在 `src/app/`，共享组件在 `src/components/`
-- **状态**：Zustand store 在 `src/store/`
-- **API**：统一用 `src/lib/request.ts` 封装的 axios 实例，不要直接 fetch
-- **类型**：API 响应类型在 `src/types/`
-- **样式**：Tailwind class，不要写自定义 CSS 文件（除全局 variables）
-
-### Git 提交
-- 英文 commit message，祈使句：`fix: ...`, `feat: ...`, `refactor: ...`
-- 一个 commit 只做一件事
-- 不要提交 `target/`、`node_modules/`、`.env`（已在 .gitignore）
-
-## 常见陷阱（务必避开）
-
-1. **`@RequiredArgsConstructor` 不能省**：`OrderTimeoutJob` 之前因为没写默认构造器导致 Spring 启动失败。所有需要 Spring 管理且有 final 字段的类都要加这个注解。
-2. **logback 用 `%i` 必须配 `SizeAndTimeBasedRollingPolicy`**，不能用 `TimeBasedRollingPolicy`，否则启动直接报错。
-3. **MySQL 连接串字符集**：JDBC URL 里写 `characterEncoding=utf8`（不是 `utf8mb4`，Java 不识别后者作为编码名）。
-4. **RocketMQ consumer 在没装 RocketMQ 的环境会阻断启动**：本地开发加 `--rocketmq.consumer.enabled=false`。
-5. **Redis Lua 脚本修改后必须重新加载**：改了 `*.lua` 文件要重启 Spring Boot，因为脚本是启动时加载缓存的。
-6. **布隆过滤器需要预热**：新增 schedule 或 movie 后必须调用 `BloomFilterService.addSchedule()` / `addMovie()`，否则抢座直接报"场次不存在"。
-7. **JWT secret 长度**：启动时会校验，短于 32 字符会警告。生产环境必须改环境变量 `JWT_SECRET`。
-8. **前端 token 过期**：axios 拦截器会自动刷新，业务代码不需要手动处理 401。
-
-## 测试
+## 常用命令
 
 ```bash
-# 后端单元测试
-cd backend && mvn test
+# 后端
+cd backend && /opt/apache-maven-3.9.11/bin/mvn test
 
 # 前端
-cd frontend && npm run build   # 类型检查 + 构建
+cd frontend && npm ci && npm run build
+
+# 基础设施/完整演示
+bash deploy/scripts/start-infra.sh
+bash deploy/scripts/start-demo.sh
+
+# Compose 静态校验
+docker compose --env-file .env -f deploy/docker/compose.infra.yml config -q
+docker compose --env-file .env -f deploy/docker/compose.app.yml config -q
 ```
 
-## 压测参考
+## Git 规范
 
-- 压测脚本和历史结果在 `tests/performance/`
-- 压测前确保：Redis 库存已预热（`seckill:stock:{scheduleId}`）、布隆过滤器已添加对应 scheduleId
-- 历史数据：单实例 Redis Lua 抢座 P50 ~50ms，QPS ~1000（Redis 直连场景）；加 MySQL outbox 同步写入后 QPS 降到 ~130
+- 使用 Conventional Commits：`feat(scope): ...`、`fix(scope): ...`、`perf(scope): ...`、`docs: ...`、`test(scope): ...`。
+- 一个提交只处理一个可独立审查的主题；提交前运行对应测试和 `git diff --check`。
+- 不提交 `.env`、密钥、Token、`target/`、`.next/`、`node_modules/` 或压测临时结果。
+- 不覆盖用户未提交的修改，不使用 `git reset --hard` 或 `git checkout --` 清理工作区。
+- 性能文档只记录真实执行结果，禁止把设计目标或推算数据写成实测数据。
+
+## 已知注意事项
+
+- Lua 文件在 `backend/src/main/resources/lua/`，修改后必须重启后端以重新加载。
+- JWT secret 至少 32 字符，生产/公网环境必须通过环境变量覆盖。
+- 本地关闭 RocketMQ Consumer 只能用于非订单接口开发，不能用于完整抢座演示。
+- MySQL JDBC 字符编码写 `UTF-8`，表和连接排序规则使用 `utf8mb4`。
+- Logback 文件名包含 `%i` 时必须使用 `SizeAndTimeBasedRollingPolicy`。

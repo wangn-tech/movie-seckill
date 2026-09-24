@@ -40,12 +40,12 @@
   <!-- MQ -->
   <rect x="620" y="320" width="200" height="50" rx="8" fill="#f59e0b"/>
   <text x="720" y="342" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">RocketMQ 5</text>
-  <text x="720" y="360" text-anchor="middle" fill="#fef3c7" font-size="11">削峰 + 定时消息</text>
+  <text x="720" y="360" text-anchor="middle" fill="#fef3c7" font-size="11">Outbox 投递 + 异步落单</text>
 
   <!-- Consumer -->
   <rect x="500" y="410" width="240" height="60" rx="8" fill="#06b6d4"/>
   <text x="620" y="435" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">OrderConsumer 异步落单</text>
-  <text x="620" y="455" text-anchor="middle" fill="#cffafe" font-size="11">同事务: order+seat+outbox</text>
+  <text x="620" y="455" text-anchor="middle" fill="#cffafe" font-size="11">事务: order+seat+事件状态</text>
 
   <!-- MySQL -->
   <rect x="180" y="410" width="240" height="60" rx="8" fill="#6366f1"/>

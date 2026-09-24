@@ -84,6 +84,7 @@ npm run dev
 - **可靠消息**：抢座入口只写 `outbox_event` 并立即返回 `PROCESSING`；Relay 以至少一次语义投递 RocketMQ，消费者和 Lua 补偿按 `requestId/event_key` 幂等。
 - **最终一致性边界**：MySQL `available_seats`、订单和 `seat_lock` 是最终事实；Redis 负责入口预扣与座位投影，启动预热和专用 reset 脚本用于重建投影。
 - **可验证证据**：`backend/src/test` 覆盖缓存并发回源、订单创建、支付和库存不足；`tests/performance/verify.sh` 校验专用场次库存、座位、requestId 和 Outbox。
+- **简历与话术**：项目描述、30 秒介绍、验证数据和高频追问见 [`docs/简历与面试表达.md`](docs/简历与面试表达.md)。
 
 ## 一键演示与验证
 

@@ -89,7 +89,7 @@ public class SeckillServiceImpl implements SeckillService {
         }
 
         ensureOutbox(userId, scheduleId, req.requestId(), seats, result == 1);
-        return status(userId, req.requestId());
+        return SeckillStatusVO.processing(req.requestId());
     }
 
     @Override

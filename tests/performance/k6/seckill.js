@@ -54,11 +54,13 @@ export default function () {
   }
 
   const requestId = `k6-${scenario}-${Date.now()}-${__VU}-${__ITER}`;
+  const requestOptions = authHeaders(userId);
+  requestOptions.tags = { scenario, batch_size: String(batchSize) };
   const response = http.post(`${baseUrl}/seckill/seize`, JSON.stringify({
     scheduleId: 9001,
     requestId,
     seats,
-  }), { ...authHeaders(userId), tags: { scenario, batch_size: String(batchSize) } });
+  }), requestOptions);
 
   luaLatency.add(response.timings.duration, { scenario, batch_size: String(batchSize) });
   if (response.status === 200) created.add(1);

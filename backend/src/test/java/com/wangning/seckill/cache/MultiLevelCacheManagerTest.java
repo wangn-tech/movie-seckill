@@ -11,7 +11,11 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -21,6 +25,7 @@ class MultiLevelCacheManagerTest {
     private Cache<String, Object> localCache;
     private StringRedisTemplate redis;
     private ValueOperations<String, String> values;
+    private RedissonClient redisson;
     private MultiLevelCacheManager manager;
 
     @BeforeEach
@@ -29,11 +34,12 @@ class MultiLevelCacheManagerTest {
         localCache = mock(Cache.class);
         redis = mock(StringRedisTemplate.class);
         values = mock(ValueOperations.class);
+        redisson = mock(RedissonClient.class);
         when(redis.opsForValue()).thenReturn(values);
         manager = new MultiLevelCacheManager(
                 localCache,
                 redis,
-                mock(RedissonClient.class),
+                redisson,
                 new ObjectMapper(),
                 mock(TaskExecutor.class));
     }
@@ -88,5 +94,45 @@ class MultiLevelCacheManagerTest {
         assertThat(result).isNull();
         assertThat(loaded).isFalse();
         verify(values).set(eq("movie:detail:999"), eq("__NULL__"), any());
+    }
+
+    @Test
+    void lockContentionUsesOneLocalDatabaseLoad() throws Exception {
+        var lock = mock(org.redisson.api.RLock.class);
+        when(lock.tryLock(2, 15, TimeUnit.SECONDS)).thenReturn(false);
+        when(redisson.getLock(anyString())).thenReturn(lock);
+        when(values.get("movie:detail:8")).thenReturn(null);
+        AtomicInteger loads = new AtomicInteger();
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch loaderStarted = new CountDownLatch(1);
+        CountDownLatch releaseLoader = new CountDownLatch(1);
+        var pool = Executors.newFixedThreadPool(2);
+        try {
+            java.util.concurrent.Callable<Movie> task = () -> manager.get("movie:detail:8", Movie.class, 600, null, () -> {
+                loads.incrementAndGet();
+                loaderStarted.countDown();
+                try {
+                    releaseLoader.await(1, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return new Movie();
+            });
+            java.util.concurrent.Callable<Movie> gatedTask = () -> {
+                ready.countDown();
+                ready.await(1, TimeUnit.SECONDS);
+                return task.call();
+            };
+            var first = pool.submit(gatedTask);
+            var second = pool.submit(gatedTask);
+            ready.await(1, TimeUnit.SECONDS);
+            loaderStarted.await(1, TimeUnit.SECONDS);
+            releaseLoader.countDown();
+            first.get(2, TimeUnit.SECONDS);
+            second.get(2, TimeUnit.SECONDS);
+            assertThat(loads).hasValue(1);
+        } finally {
+            pool.shutdownNow();
+        }
     }
 }

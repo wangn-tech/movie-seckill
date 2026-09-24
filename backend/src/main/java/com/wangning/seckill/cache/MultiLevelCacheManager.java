@@ -16,6 +16,9 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
@@ -36,6 +39,7 @@ public class MultiLevelCacheManager {
     private final RedissonClient redisson;
     private final ObjectMapper objectMapper;
     private final TaskExecutor cacheRebuildExecutor;
+    private final ConcurrentHashMap<String, CompletableFuture<Object>> localLoads = new ConcurrentHashMap<>();
 
     public MultiLevelCacheManager(Cache<String, Object> localCache,
                                   StringRedisTemplate redis,
@@ -108,17 +112,45 @@ public class MultiLevelCacheManager {
 
             Thread.sleep(50);
             CacheObject<T> latest = readRedis(key, type);
-            return latest != null ? latest.data() : loader.get();
+            return latest != null ? latest.data() : loadWithSingleFlight(key, ttlSec, loader);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return loader.get();
+            return loadWithSingleFlight(key, ttlSec, loader);
         } catch (Exception e) {
             log.error("缓存回源失败 key={}", key, e);
-            return loader.get();
+            return loadWithSingleFlight(key, ttlSec, loader);
         } finally {
             if (locked && lock.isHeldByCurrentThread()) {
                 lock.unlock();
             }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> T loadWithSingleFlight(String key, long ttlSec, Supplier<T> loader) {
+        CompletableFuture<Object> created = new CompletableFuture<>();
+        CompletableFuture<Object> active = localLoads.putIfAbsent(key, created);
+        if (active != null) {
+            try {
+                return (T) active.join();
+            } catch (CompletionException e) {
+                if (e.getCause() instanceof RuntimeException runtimeException) {
+                    throw runtimeException;
+                }
+                throw e;
+            }
+        }
+
+        try {
+            T data = loader.get();
+            put(key, data, ttlSec);
+            created.complete(data);
+            return data;
+        } catch (RuntimeException e) {
+            created.completeExceptionally(e);
+            throw e;
+        } finally {
+            localLoads.remove(key, created);
         }
     }
 

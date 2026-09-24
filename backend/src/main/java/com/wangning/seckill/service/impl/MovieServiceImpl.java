@@ -26,7 +26,7 @@ public class MovieServiceImpl implements MovieService {
     @Override
     public List<Movie> hotMovies() {
         String key = CacheKeyConstants.movieList(1);
-        return cache.get(key, List.class, 600, null,
+        return cache.getList(key, Movie.class, 600, null,
                 () -> movieMapper.selectList(new LambdaQueryWrapper<Movie>()
                         .eq(Movie::getStatus, 1)
                         .eq(Movie::getDeleted, 0)));

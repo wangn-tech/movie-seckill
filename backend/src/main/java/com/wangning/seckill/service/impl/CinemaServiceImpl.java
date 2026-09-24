@@ -20,7 +20,7 @@ public class CinemaServiceImpl implements CinemaService {
 
     @Override
     public List<Cinema> list() {
-        return cache.get(CacheKeyConstants.cinemaList(), List.class, 600, null,
+        return cache.getList(CacheKeyConstants.cinemaList(), Cinema.class, 600, null,
                 () -> cinemaMapper.selectList(new LambdaQueryWrapper<>()));
     }
 }

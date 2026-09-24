@@ -23,7 +23,7 @@ public class ScheduleServiceImpl implements ScheduleService {
     @Override
     public List<Schedule> listByMovieAndCinema(Long movieId, Long cinemaId) {
         String key = CacheKeyConstants.scheduleList(movieId, cinemaId);
-        return cache.get(key, List.class, 300, null,
+        return cache.getList(key, Schedule.class, 300, null,
                 () -> scheduleMapper.selectList(new LambdaQueryWrapper<Schedule>()
                         .eq(Schedule::getMovieId, movieId)
                         .eq(Schedule::getCinemaId, cinemaId)

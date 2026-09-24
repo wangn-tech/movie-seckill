@@ -2,10 +2,11 @@ package com.wangning.seckill.config;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Expiry;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Caffeine 本地缓存（L1）配置。
@@ -21,7 +22,27 @@ public class CaffeineConfig {
     public Cache<String, Object> localCache() {
         return Caffeine.newBuilder()
                 .maximumSize(10_000)
-                .expireAfterWrite(Duration.ofMinutes(10))
+                .expireAfter(new Expiry<String, Object>() {
+                    @Override
+                    public long expireAfterCreate(String key, Object value, long currentTime) {
+                        return ttlNanos(key);
+                    }
+
+                    @Override
+                    public long expireAfterUpdate(String key, Object value, long currentTime, long currentDuration) {
+                        return ttlNanos(key);
+                    }
+
+                    @Override
+                    public long expireAfterRead(String key, Object value, long currentTime, long currentDuration) {
+                        return currentDuration;
+                    }
+
+                    private long ttlNanos(String key) {
+                        long seconds = key.startsWith("schedule:") ? 30 : 120;
+                        return TimeUnit.SECONDS.toNanos(seconds);
+                    }
+                })
                 .recordStats()
                 .build();
     }

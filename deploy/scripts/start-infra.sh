@@ -10,12 +10,20 @@ if [ ! -f .env ]; then
   cp .env.example .env
 fi
 
+set -a
+# shellcheck disable=SC1091
+source .env
+set +a
+export MYSQL_USER="${MYSQL_USER:-maoyan}"
+export MYSQL_PASSWORD="${MYSQL_PASSWORD:-maoyan-demo-password}"
+export MYSQL_DATABASE="${MYSQL_DATABASE:-movie_seckill}"
+
 echo "=== 2. 启动中间件 ==="
-docker compose --env-file .env -f deploy/docker/compose.infra.yml up -d
+docker compose --env-file .env -p maoyan-infra -f deploy/docker/compose.infra.yml up -d
 
 echo "=== 3. 等待 MySQL 就绪 ==="
 for i in $(seq 1 30); do
-  if docker exec maoyan-mysql mysqladmin ping -uroot -proot123 --silent 2>/dev/null; then
+  if docker exec maoyan-mysql sh -c 'mysqladmin ping -uroot -p"$MYSQL_ROOT_PASSWORD" --silent' 2>/dev/null; then
     echo "✅ MySQL 就绪"
     break
   fi

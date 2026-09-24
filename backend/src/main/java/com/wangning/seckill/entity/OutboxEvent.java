@@ -14,6 +14,12 @@ public class OutboxEvent {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    /** 业务幂等键，抢座入口使用 requestId。 */
+    private String eventKey;
+
+    private Long userId;
+    private Long scheduleId;
+
     private String eventType;
     private String topic;
     private String payload;
@@ -23,6 +29,10 @@ public class OutboxEvent {
 
     private Integer retryCount;
     private Integer maxRetry;
+
+    /** PROCESSING / SUCCEEDED / FAILED */
+    private String processStatus;
+    private String failReason;
 
     private LocalDateTime createTime;
     private LocalDateTime sentTime;

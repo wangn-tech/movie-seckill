@@ -60,6 +60,9 @@ CREATE TABLE IF NOT EXISTS movie_schedule (
   show_time       VARCHAR(10) NOT NULL,
   total_seats     INT NOT NULL DEFAULT 120,
   available_seats INT NOT NULL DEFAULT 120,
+  seat_rows       INT NOT NULL DEFAULT 10 COMMENT '座位图行边界',
+  seat_cols       INT NOT NULL DEFAULT 14 COMMENT '座位图列边界',
+  unavailable_seats JSON NULL COMMENT '过道/空位/不可售座位坐标',
   price           DECIMAL(10,2) NOT NULL DEFAULT 39.90,
   status          TINYINT DEFAULT 1 COMMENT '1可售 0停售',
   version         INT DEFAULT 0,
@@ -118,21 +121,28 @@ CREATE TABLE IF NOT EXISTS order_seat (
   row_num     INT NOT NULL,
   col_num     INT NOT NULL,
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_schedule_seat (schedule_id, row_num, col_num)
+  KEY idx_schedule_seat (schedule_id, row_num, col_num)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='订单座位明细';
 
 -- ---------- Outbox 本地消息表 ----------
 CREATE TABLE IF NOT EXISTS outbox_event (
   id           BIGINT PRIMARY KEY AUTO_INCREMENT,
+  event_key    VARCHAR(64) NOT NULL COMMENT '业务幂等键',
+  user_id      BIGINT NULL,
+  schedule_id  BIGINT NULL,
   event_type   VARCHAR(64) NOT NULL COMMENT 'ORDER_CREATED/ORDER_PAID/ORDER_CANCELLED',
   topic        VARCHAR(128) NOT NULL,
   payload      TEXT NOT NULL,
   status       VARCHAR(16) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/SENT/DEAD',
   retry_count  INT DEFAULT 0,
   max_retry    INT DEFAULT 10,
+  process_status VARCHAR(16) NOT NULL DEFAULT 'PROCESSING' COMMENT 'PROCESSING/SUCCEEDED/FAILED',
+  fail_reason  VARCHAR(500) NULL,
   create_time  DATETIME DEFAULT CURRENT_TIMESTAMP,
   sent_time    DATETIME NULL,
-  KEY idx_status_create (status, create_time)
+  UNIQUE KEY uk_event_key (event_key),
+  KEY idx_status_create (status, create_time),
+  KEY idx_process_status (process_status, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Outbox 本地消息表';
 
 -- =====================================================
@@ -156,8 +166,23 @@ INSERT INTO cinema (name, address, city) VALUES
 ('CGV影城(南山店)', '深圳市南山区海岸城 5F', '深圳');
 
 -- 场次：每个影院对每部电影排一场，库存 120
-INSERT INTO movie_schedule (movie_id, cinema_id, hall_name, show_date, show_time, total_seats, available_seats, price) VALUES
-(1, 1, 'IMAX 厅', CURDATE(), '19:30', 120, 120, 39.90),
-(1, 2, '杜比厅', CURDATE(), '20:15', 120, 120, 45.00),
-(2, 1, '普通厅', CURDATE(), '21:00', 100, 100, 35.00),
-(3, 2, 'IMAX 厅', CURDATE(), '22:00', 120, 120, 49.90);
+-- 10x14 是布局边界；第 5/10 列为过道，因此有效座位为 120，而不是 140。
+SET @aisles = JSON_ARRAY(
+  JSON_OBJECT('row',1,'col',5), JSON_OBJECT('row',1,'col',10),
+  JSON_OBJECT('row',2,'col',5), JSON_OBJECT('row',2,'col',10),
+  JSON_OBJECT('row',3,'col',5), JSON_OBJECT('row',3,'col',10),
+  JSON_OBJECT('row',4,'col',5), JSON_OBJECT('row',4,'col',10),
+  JSON_OBJECT('row',5,'col',5), JSON_OBJECT('row',5,'col',10),
+  JSON_OBJECT('row',6,'col',5), JSON_OBJECT('row',6,'col',10),
+  JSON_OBJECT('row',7,'col',5), JSON_OBJECT('row',7,'col',10),
+  JSON_OBJECT('row',8,'col',5), JSON_OBJECT('row',8,'col',10),
+  JSON_OBJECT('row',9,'col',5), JSON_OBJECT('row',9,'col',10),
+  JSON_OBJECT('row',10,'col',5), JSON_OBJECT('row',10,'col',10)
+);
+
+INSERT INTO movie_schedule (movie_id, cinema_id, hall_name, show_date, show_time,
+  total_seats, available_seats, seat_rows, seat_cols, unavailable_seats, price) VALUES
+(1, 1, 'IMAX 厅', CURDATE(), '19:30', 120, 120, 10, 14, @aisles, 39.90),
+(1, 2, '杜比厅', CURDATE(), '20:15', 120, 120, 10, 14, @aisles, 45.00),
+(2, 1, '普通厅', CURDATE(), '21:00', 120, 120, 10, 14, @aisles, 35.00),
+(3, 2, 'IMAX 厅', CURDATE(), '22:00', 120, 120, 10, 14, @aisles, 49.90);

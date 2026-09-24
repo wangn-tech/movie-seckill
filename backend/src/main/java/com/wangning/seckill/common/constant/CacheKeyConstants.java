@@ -18,6 +18,11 @@ public final class CacheKeyConstants {
         return "seckill:reservation:" + requestId;
     }
 
+    /** 库存释放幂等标记 */
+    public static String releaseMarker(String requestId) {
+        return "seckill:released:" + requestId;
+    }
+
     /** 单座锁：seckill:seat:{scheduleId}:{row}-{col} */
     public static String seatKey(Long scheduleId, int row, int col) {
         return "seckill:seat:" + scheduleId + ":" + row + "-" + col;

@@ -31,6 +31,9 @@ public enum ResultCode {
     BALANCE_NOT_ENOUGH(2006, "余额不足"),
     SCHEDULE_NOT_STARTED(2007, "秒杀尚未开始"),
     SCHEDULE_ENDED(2008, "秒杀已结束"),
+    IDEMPOTENCY_CONFLICT(2009, "requestId 已用于其他请求"),
+    INVALID_SEAT(2010, "包含无效或不可售座位"),
+    ORDER_PROCESSING_FAILED(2011, "订单创建失败，库存已释放"),
 
     // 系统相关 50xx
     SYSTEM_ERROR(5000, "系统繁忙，请稍后再试"),

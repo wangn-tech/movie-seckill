@@ -2,35 +2,24 @@ package com.wangning.seckill.mq.consumer;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.wangning.seckill.entity.*;
-import com.wangning.seckill.mapper.*;
+import com.wangning.seckill.dto.OrderCreateEvent;
+import com.wangning.seckill.entity.OutboxEvent;
+import com.wangning.seckill.entity.TicketOrder;
+import com.wangning.seckill.mapper.OutboxEventMapper;
+import com.wangning.seckill.mapper.TicketOrderMapper;
+import com.wangning.seckill.service.OrderCreationService;
+import com.wangning.seckill.service.RedisSeatService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
 import org.apache.rocketmq.spring.core.RocketMQListener;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
 
 /**
- * 抢座消息消费者 — 异步落单。
- *
- * <p>在同一个 DB 事务里完成：
- * <ol>
- *   <li>INSERT ticket_order（uk_lock_token 幂等）</li>
- *   <li>INSERT order_seat 明细</li>
- *   <li>INSERT seat_lock（uk_seat 兜底座位重售）</li>
- *   <li>UPDATE movie_schedule SET available=available-n WHERE available>=n（条件更新兜底超卖）</li>
- *   <li>INSERT outbox_event（下游事件）</li>
- * </ol>
+ * 抢座入口事件消费者。事务由 OrderCreationService 负责，使失败补偿在事务回滚后执行。
  */
 @Slf4j
 @Component
@@ -39,119 +28,55 @@ import java.util.UUID;
 @RocketMQMessageListener(topic = "${seckill.mq.topic-order}", consumerGroup = "seckill-order-consumer-group")
 public class SeckillOrderConsumer implements RocketMQListener<String> {
 
-    private final TicketOrderMapper orderMapper;
-    private final OrderSeatMapper orderSeatMapper;
-    private final SeatLockMapper seatLockMapper;
-    private final ScheduleMapper scheduleMapper;
-    private final OutboxEventMapper outboxEventMapper;
-    private final MovieMapper movieMapper;
-    private final CinemaMapper cinemaMapper;
     private final ObjectMapper objectMapper;
+    private final OrderCreationService orderCreationService;
+    private final RedisSeatService redisSeatService;
+    private final TicketOrderMapper orderMapper;
+    private final OutboxEventMapper outboxMapper;
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public void onMessage(String message) {
+        OrderCreateEvent event;
         try {
-            JsonNode node = objectMapper.readTree(message);
-            Long userId = node.get("userId").asLong();
-            Long scheduleId = node.get("scheduleId").asLong();
-            String requestId = node.get("requestId").asText();
-
-            List<int[]> seats = new ArrayList<>();
-            node.withArray("seats").forEach(s -> seats.add(new int[]{s.get("row").asInt(), s.get("col").asInt()}));
-
-            doCreateOrder(userId, scheduleId, requestId, seats, message);
+            event = objectMapper.readValue(message, OrderCreateEvent.class);
         } catch (Exception e) {
-            log.error("消费抢座消息失败: {}", message, e);
+            log.error("抢座消息格式非法: {}", message, e);
+            return;
+        }
+
+        try {
+            orderCreationService.create(event);
+        } catch (DuplicateKeyException e) {
+            // 并发重复消息若已有同 requestId 订单，视为幂等成功；否则是座位唯一键冲突。
+            Long existing = orderMapper.selectCount(new LambdaQueryWrapper<TicketOrder>()
+                    .eq(TicketOrder::getLockToken, event.requestId()));
+            if (existing != null && existing > 0) {
+                markSucceeded(event.requestId());
+                return;
+            }
+            rejectAndRelease(event, "座位已被其他订单占用");
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            rejectAndRelease(event, e.getMessage());
+        } catch (Exception e) {
+            // 数据库/网络等技术异常交给 RocketMQ 重试，不提前释放库存。
+            log.error("订单消费技术异常，等待MQ重试 requestId={}", event.requestId(), e);
             throw new RuntimeException(e);
         }
     }
 
-    public void doCreateOrder(Long userId, Long scheduleId, String requestId,
-                              List<int[]> seats, String rawMsg) {
-        // 1. 幂等
-        Long exists = orderMapper.selectCount(
-                new LambdaQueryWrapper<TicketOrder>().eq(TicketOrder::getLockToken, requestId));
-        if (exists != null && exists > 0) {
-            log.info("订单已存在，幂等返回 requestId={}", requestId);
-            return;
-        }
+    private void rejectAndRelease(OrderCreateEvent event, String reason) {
+        outboxMapper.update(null, new LambdaUpdateWrapper<OutboxEvent>()
+                .eq(OutboxEvent::getEventKey, event.requestId())
+                .set(OutboxEvent::getProcessStatus, "FAILED")
+                .set(OutboxEvent::getFailReason, reason));
+        redisSeatService.release(event.userId(), event.scheduleId(), event.requestId(),
+                event.seats(), event.seats().size());
+        log.warn("订单创建被拒绝，已释放Redis预占 requestId={}, reason={}", event.requestId(), reason);
+    }
 
-        // 2. 查场次 + 电影 + 影院（填冗余字段）
-        Schedule schedule = scheduleMapper.selectById(scheduleId);
-        if (schedule == null) {
-            throw new IllegalStateException("场次不存在: " + scheduleId);
-        }
-        Movie movie = movieMapper.selectById(schedule.getMovieId());
-        Cinema cinema = cinemaMapper.selectById(schedule.getCinemaId());
-
-        // 3. MySQL 条件更新库存
-        int seatCount = seats.size();
-        int updated = scheduleMapper.update(null,
-                new LambdaUpdateWrapper<Schedule>()
-                        .setSql("available_seats = available_seats - " + seatCount)
-                        .eq(Schedule::getId, scheduleId)
-                        .ge(Schedule::getAvailableSeats, seatCount));
-        if (updated == 0) {
-            throw new IllegalStateException("库存不足");
-        }
-
-        // 4. 创建订单
-        String orderNo = "SO" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 6);
-        StringBuilder seatsInfo = new StringBuilder();
-        TicketOrder order = new TicketOrder();
-        order.setOrderNo(orderNo);
-        order.setUserId(userId);
-        order.setScheduleId(scheduleId);
-        order.setLockToken(requestId);
-        order.setMovieName(movie != null ? movie.getName() : "");
-        order.setCinemaName(cinema != null ? cinema.getName() : "");
-        order.setShowTime(schedule.getShowDate() + " " + schedule.getShowTime());
-        order.setSeatCount(seatCount);
-        order.setTotalPrice(schedule.getPrice().multiply(BigDecimal.valueOf(seatCount)));
-        order.setStatus(0);
-        order.setExpireTime(LocalDateTime.now().plusMinutes(30));
-
-        for (int i = 0; i < seats.size(); i++) {
-            int[] s = seats.get(i);
-            if (i > 0) seatsInfo.append(",");
-            seatsInfo.append(s[0] + 1).append("排").append(s[1] + 1).append("座");
-        }
-        order.setSeatsInfo(seatsInfo.toString());
-        orderMapper.insert(order);
-
-        // 5. 写 order_seat 明细 + seat_lock
-        for (int[] s : seats) {
-            OrderSeat os = new OrderSeat();
-            os.setOrderId(order.getId());
-            os.setOrderNo(orderNo);
-            os.setScheduleId(scheduleId);
-            os.setRowNum(s[0]);
-            os.setColNum(s[1]);
-            orderSeatMapper.insert(os);
-
-            SeatLock sl = new SeatLock();
-            sl.setScheduleId(scheduleId);
-            sl.setRowNum(s[0]);
-            sl.setColNum(s[1]);
-            sl.setUserId(userId);
-            sl.setLockToken(requestId);
-            sl.setOrderNo(orderNo);
-            sl.setLockUntil(LocalDateTime.now().plusMinutes(30));
-            sl.setStatus(1);
-            seatLockMapper.insert(sl);
-        }
-
-        // 6. 写 outbox_event
-        OutboxEvent event = new OutboxEvent();
-        event.setEventType("ORDER_CREATED");
-        event.setTopic("seckill-order-event-topic");
-        event.setPayload(rawMsg);
-        event.setStatus("PENDING");
-        event.setRetryCount(0);
-        event.setMaxRetry(10);
-        outboxEventMapper.insert(event);
-
-        log.info("订单创建成功 orderNo={}, userId={}, seats={}", orderNo, userId, seatsInfo);
+    private void markSucceeded(String requestId) {
+        outboxMapper.update(null, new LambdaUpdateWrapper<OutboxEvent>()
+                .eq(OutboxEvent::getEventKey, requestId)
+                .set(OutboxEvent::getProcessStatus, "SUCCEEDED"));
     }
 }

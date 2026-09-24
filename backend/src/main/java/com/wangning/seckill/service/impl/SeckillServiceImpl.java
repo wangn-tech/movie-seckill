@@ -1,162 +1,193 @@
 package com.wangning.seckill.service.impl;
 
+import cn.hutool.crypto.SecureUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.seckill.cache.BloomFilterService;
-import com.wangning.seckill.common.constant.CacheKeyConstants;
 import com.wangning.seckill.common.exception.BizException;
 import com.wangning.seckill.common.exception.ResultCode;
 import com.wangning.seckill.dto.SeckillReq;
+import com.wangning.seckill.dto.OrderCreateEvent;
 import com.wangning.seckill.entity.OutboxEvent;
+import com.wangning.seckill.entity.Schedule;
+import com.wangning.seckill.entity.TicketOrder;
 import com.wangning.seckill.mapper.OutboxEventMapper;
 import com.wangning.seckill.mapper.ScheduleMapper;
+import com.wangning.seckill.mapper.TicketOrderMapper;
+import com.wangning.seckill.service.RedisSeatService;
 import com.wangning.seckill.service.SeckillService;
+import com.wangning.seckill.vo.OrderVO;
+import com.wangning.seckill.vo.SeatLayoutVO;
+import com.wangning.seckill.vo.SeckillStatusVO;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.rocketmq.client.producer.DefaultMQProducer;
-import org.apache.rocketmq.common.message.Message;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ClassPathResource;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
-import org.springframework.scripting.support.ResourceScriptSource;
 import org.springframework.stereotype.Service;
 
-import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.Set;
 
-/**
- * 抢座核心服务实现 — 面试重点。
- *
- * <p>链路：
- * <ol>
- *   <li>布隆过滤器校验场次存在</li>
- *   <li>Redis Lua 原子：幂等 + 座位冲突 + 库存预扣 + 锁定</li>
- *   <li>写 outbox_event(PENDING)，由 OutboxRelayJob 投递 MQ（最终一致）</li>
- * </ol>
- */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class SeckillServiceImpl implements SeckillService {
+
+    private static final long SEAT_LOCK_TTL = 30 * 60;
+    private static final long RESERVATION_TTL = SEAT_LOCK_TTL + 10 * 60;
 
     private final StringRedisTemplate redis;
     private final BloomFilterService bloom;
     private final ScheduleMapper scheduleMapper;
+    private final TicketOrderMapper orderMapper;
     private final OutboxEventMapper outboxMapper;
-    private final DefaultMQProducer mqProducer;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final RedisSeatService redisSeatService;
+    private final ObjectMapper objectMapper;
 
     @Value("${seckill.mq.topic-order:seckill-order-topic}")
     private String orderTopic;
 
-    private final DefaultRedisScript<Long> reserveScript;
-
-    public SeckillServiceImpl(StringRedisTemplate redis,
-                             BloomFilterService bloom,
-                             ScheduleMapper scheduleMapper,
-                             OutboxEventMapper outboxMapper,
-                             DefaultMQProducer mqProducer) {
-        this.redis = redis;
-        this.bloom = bloom;
-        this.scheduleMapper = scheduleMapper;
-        this.outboxMapper = outboxMapper;
-        this.mqProducer = mqProducer;
-        this.reserveScript = new DefaultRedisScript<>();
-        this.reserveScript.setScriptSource(new ResourceScriptSource(new ClassPathResource("lua/seat_reserve.lua")));
-        this.reserveScript.setResultType(Long.class);
-    }
-
     @Override
-    public String seize(Long userId, SeckillReq req) {
+    public SeckillStatusVO seize(Long userId, SeckillReq req) {
         Long scheduleId = req.scheduleId();
-
-        // 1. 布隆过滤器：不存在的场次直接拒绝，防穿透
         if (!bloom.mightContainSchedule(scheduleId)) {
             throw new BizException(ResultCode.NOT_FOUND, "场次不存在");
         }
 
-        // 2. requestId 幂等：前端没传就生成
-        String requestId = req.requestId() != null ? req.requestId() : UUID.randomUUID().toString();
-
-        // 3. 组装 Lua KEYS
-        List<String> keys = new ArrayList<>();
-        keys.add(CacheKeyConstants.stockKey(scheduleId));
-        keys.add(CacheKeyConstants.reservationKey(requestId));
-        for (SeckillReq.Seat s : req.seats()) {
-            keys.add(CacheKeyConstants.seatKey(scheduleId, s.row(), s.col()));
+        Schedule schedule = scheduleMapper.selectById(scheduleId);
+        if (schedule == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "场次不存在");
+        }
+        if (!Integer.valueOf(1).equals(schedule.getStatus())) {
+            throw new BizException(ResultCode.SCHEDULE_ENDED);
         }
 
-        int seatCount = req.seats().size();
-        long seatLockTtl = 30 * 60;
-        long reservationTtl = 30 * 60 + 600;
+        List<SeckillReq.Seat> seats = req.seats().stream()
+                .sorted(Comparator.comparingInt(SeckillReq.Seat::row).thenComparingInt(SeckillReq.Seat::col))
+                .toList();
+        validateSeats(schedule, seats);
 
-        // 4. 执行 Lua 原子扣库存
-        Long result = redis.execute(reserveScript, keys,
-                String.valueOf(userId), requestId,
-                String.valueOf(seatLockTtl),
-                String.valueOf(reservationTtl),
-                String.valueOf(seatCount));
+        String fingerprint = fingerprint(userId, scheduleId, seats);
+        long result = redisSeatService.reserve(userId, scheduleId, req.requestId(), fingerprint,
+                seats, SEAT_LOCK_TTL, RESERVATION_TTL);
 
-        // 5. 根据 Lua 结果处理
-        if (result == 1L || result == 2L) {
-            // 幂等：如果 outbox 已有记录，说明已处理过
-            Long exists = outboxMapper.selectCount(new LambdaQueryWrapper<OutboxEvent>()
-                    .eq(OutboxEvent::getTopic, orderTopic)
-                    .last("LIMIT 1"));
-            // 写 outbox_event，由 OutboxRelayJob 异步投递 MQ（最终一致兜底）
-            String payload = buildPayload(userId, scheduleId, requestId, req.seats());
+        if (result == -1) {
+            throw new BizException(ResultCode.SEAT_CONFLICT);
+        }
+        if (result == -2) {
+            throw new BizException(ResultCode.STOCK_NOT_ENOUGH);
+        }
+        if (result == -3) {
+            throw new BizException(ResultCode.IDEMPOTENCY_CONFLICT);
+        }
+        if (result != 1 && result != 2) {
+            throw new BizException(ResultCode.REDIS_ERROR);
+        }
+
+        ensureOutbox(userId, scheduleId, req.requestId(), seats, result == 1);
+        return status(userId, req.requestId());
+    }
+
+    @Override
+    public SeckillStatusVO status(Long userId, String requestId) {
+        TicketOrder order = orderMapper.selectOne(new LambdaQueryWrapper<TicketOrder>()
+                .eq(TicketOrder::getLockToken, requestId)
+                .eq(TicketOrder::getUserId, userId));
+        if (order != null) {
+            return new SeckillStatusVO(requestId, "CREATED", "订单创建成功", OrderVO.from(order));
+        }
+
+        OutboxEvent event = outboxMapper.selectOne(new LambdaQueryWrapper<OutboxEvent>()
+                .eq(OutboxEvent::getEventKey, requestId)
+                .eq(OutboxEvent::getUserId, userId));
+        if (event == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "抢座请求不存在");
+        }
+        if ("FAILED".equals(event.getProcessStatus())) {
+            return new SeckillStatusVO(requestId, "FAILED",
+                    event.getFailReason() == null ? ResultCode.ORDER_PROCESSING_FAILED.getMessage() : event.getFailReason(),
+                    null);
+        }
+        return SeckillStatusVO.processing(requestId);
+    }
+
+    private void ensureOutbox(Long userId, Long scheduleId, String requestId,
+                              List<SeckillReq.Seat> seats, boolean newlyReserved) {
+        if (outboxMapper.selectCount(new LambdaQueryWrapper<OutboxEvent>()
+                .eq(OutboxEvent::getEventKey, requestId)) > 0) {
+            return;
+        }
+
+        try {
             OutboxEvent event = new OutboxEvent();
-            event.setEventType("ORDER_CREATED");
+            event.setEventKey(requestId);
+            event.setUserId(userId);
+            event.setScheduleId(scheduleId);
+            event.setEventType("ORDER_CREATE");
             event.setTopic(orderTopic);
-            event.setPayload(payload);
+            event.setPayload(objectMapper.writeValueAsString(
+                    new OrderCreateEvent(userId, scheduleId, requestId, seats)));
             event.setStatus("PENDING");
+            event.setProcessStatus("PROCESSING");
             event.setRetryCount(0);
             event.setMaxRetry(10);
             outboxMapper.insert(event);
-
-            // 立即尝试投递一次（不等 2 秒轮询），成功标记 SENT
-            try {
-                Message msg = new Message(orderTopic, "ORDER_CREATED",
-                        requestId, payload.getBytes(StandardCharsets.UTF_8));
-                mqProducer.send(msg);
-                event.setStatus("SENT");
-                event.setSentTime(LocalDateTime.now());
-                outboxMapper.updateById(event);
-                log.info("抢座成功并直接投递 MQ requestId={}", requestId);
-            } catch (Exception mqEx) {
-                log.warn("MQ 直接投递失败，由 OutboxRelayJob 兜底 requestId={}: {}", requestId, mqEx.getMessage());
+        } catch (DuplicateKeyException ignored) {
+            // 并发重试由 uk_event_key 收敛为一个入口事件。
+        } catch (Exception e) {
+            if (newlyReserved) {
+                redisSeatService.release(userId, scheduleId, requestId, seats, seats.size());
             }
-
-            log.info("抢座成功 userId={}, scheduleId={}, requestId={}", userId, scheduleId, requestId);
-            return requestId;
-        } else if (result == -1L) {
-            throw new BizException(ResultCode.SEAT_CONFLICT);
-        } else if (result == -2L) {
-            throw new BizException(ResultCode.STOCK_NOT_ENOUGH);
-        } else {
-            throw new BizException(ResultCode.SYSTEM_ERROR);
+            throw new BizException(ResultCode.SYSTEM_ERROR, "请求入队失败，库存已释放");
         }
     }
 
-    private String buildPayload(Long userId, Long scheduleId, String requestId, List<SeckillReq.Seat> seats) {
-        try {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("userId", userId);
-            m.put("scheduleId", scheduleId);
-            m.put("requestId", requestId);
-            m.put("seats", seats);
-            return objectMapper.writeValueAsString(m);
-        } catch (Exception e) {
-            throw new IllegalStateException("序列化抢座消息失败", e);
+    private void validateSeats(Schedule schedule, List<SeckillReq.Seat> seats) {
+        if (seats.isEmpty() || seats.size() > schedule.getTotalSeats()) {
+            throw new BizException(ResultCode.INVALID_SEAT);
         }
+
+        Set<String> selected = new HashSet<>();
+        Set<String> unavailable = parseUnavailable(schedule.getUnavailableSeats());
+        for (SeckillReq.Seat seat : seats) {
+            String coordinate = seat.row() + "-" + seat.col();
+            boolean outside = seat.row() < 1 || seat.row() > schedule.getSeatRows()
+                    || seat.col() < 1 || seat.col() > schedule.getSeatCols();
+            if (outside || unavailable.contains(coordinate) || !selected.add(coordinate)) {
+                throw new BizException(ResultCode.INVALID_SEAT);
+            }
+        }
+    }
+
+    private Set<String> parseUnavailable(String json) {
+        if (json == null || json.isBlank()) {
+            return Set.of();
+        }
+        try {
+            List<SeatLayoutVO.Seat> seats = objectMapper.readValue(json, new TypeReference<>() { });
+            Set<String> result = new HashSet<>();
+            seats.forEach(seat -> result.add(seat.row() + "-" + seat.col()));
+            return result;
+        } catch (Exception e) {
+            throw new IllegalStateException("场次座位布局配置错误", e);
+        }
+    }
+
+    private String fingerprint(Long userId, Long scheduleId, List<SeckillReq.Seat> seats) {
+        StringBuilder canonical = new StringBuilder()
+                .append(userId).append(':').append(scheduleId).append(':');
+        seats.forEach(seat -> canonical.append(seat.row()).append('-').append(seat.col()).append(','));
+        return SecureUtil.sha256(canonical.toString());
     }
 
     @Override
     public void preloadStock(Long scheduleId, int stock) {
-        redis.opsForValue().set(CacheKeyConstants.stockKey(scheduleId), String.valueOf(stock));
+        redis.opsForValue().set(com.wangning.seckill.common.constant.CacheKeyConstants.stockKey(scheduleId),
+                String.valueOf(stock));
     }
+
 }

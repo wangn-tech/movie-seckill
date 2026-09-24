@@ -27,6 +27,11 @@ public class Schedule {
 
     private Integer totalSeats;
     private Integer availableSeats;
+    /** 座位图边界；实际可售数不等于行列乘积。 */
+    private Integer seatRows;
+    private Integer seatCols;
+    /** JSON 坐标数组，表示过道、空位、维修位等不可售位置。 */
+    private String unavailableSeats;
     private BigDecimal price;
 
     /** 1可售 0停售 */

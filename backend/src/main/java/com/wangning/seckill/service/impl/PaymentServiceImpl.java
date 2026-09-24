@@ -5,9 +5,13 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.wangning.seckill.common.exception.BizException;
 import com.wangning.seckill.common.exception.ResultCode;
 import com.wangning.seckill.entity.SeatLock;
+import com.wangning.seckill.entity.OrderSeat;
+import com.wangning.seckill.entity.OutboxEvent;
 import com.wangning.seckill.entity.TicketOrder;
 import com.wangning.seckill.entity.User;
 import com.wangning.seckill.mapper.SeatLockMapper;
+import com.wangning.seckill.mapper.OrderSeatMapper;
+import com.wangning.seckill.mapper.OutboxEventMapper;
 import com.wangning.seckill.mapper.TicketOrderMapper;
 import com.wangning.seckill.mapper.UserMapper;
 import com.wangning.seckill.service.PaymentService;
@@ -18,6 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wangning.seckill.dto.InventoryEvent;
+import com.wangning.seckill.dto.SeckillReq;
+import org.springframework.beans.factory.annotation.Value;
 
 /**
  * 模拟支付服务实现。
@@ -33,6 +42,12 @@ public class PaymentServiceImpl implements PaymentService {
     private final TicketOrderMapper orderMapper;
     private final UserMapper userMapper;
     private final SeatLockMapper seatLockMapper;
+    private final OrderSeatMapper orderSeatMapper;
+    private final OutboxEventMapper outboxMapper;
+    private final ObjectMapper objectMapper;
+
+    @Value("${seckill.mq.topic-inventory:seckill-inventory-topic}")
+    private String inventoryTopic;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -80,6 +95,31 @@ public class PaymentServiceImpl implements PaymentService {
                         .eq(SeatLock::getScheduleId, order.getScheduleId())
                         .eq(SeatLock::getOrderNo, orderNo)
                         .set(SeatLock::getStatus, 2));
+
+        List<OrderSeat> orderSeats = orderSeatMapper.selectList(
+                new LambdaQueryWrapper<OrderSeat>().eq(OrderSeat::getOrderId, order.getId()));
+        List<SeckillReq.Seat> seats = orderSeats.stream()
+                .map(seat -> new SeckillReq.Seat(seat.getRowNum(), seat.getColNum()))
+                .toList();
+        String eventKey = "pay:" + orderNo;
+        try {
+            OutboxEvent event = new OutboxEvent();
+            event.setEventKey(eventKey);
+            event.setUserId(userId);
+            event.setScheduleId(order.getScheduleId());
+            event.setEventType("SEAT_CONFIRM");
+            event.setTopic(inventoryTopic);
+            event.setPayload(objectMapper.writeValueAsString(new InventoryEvent(
+                    eventKey, "CONFIRM", userId, order.getScheduleId(), order.getLockToken(),
+                    orderNo, order.getSeatCount(), seats)));
+            event.setStatus("PENDING");
+            event.setProcessStatus("PROCESSING");
+            event.setRetryCount(0);
+            event.setMaxRetry(10);
+            outboxMapper.insert(event);
+        } catch (Exception e) {
+            throw new IllegalStateException("创建支付库存事件失败", e);
+        }
 
         log.info("支付成功 orderNo={}, userId={}", orderNo, userId);
     }

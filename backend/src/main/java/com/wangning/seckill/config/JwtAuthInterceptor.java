@@ -32,7 +32,7 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
         }
         String token = header.substring(7);
         try {
-            Long userId = jwtUtil.parseUserId(token);
+            Long userId = jwtUtil.parseAccessUserId(token);
             UserContextHolder.setUserId(userId);
             return true;
         } catch (Exception e) {

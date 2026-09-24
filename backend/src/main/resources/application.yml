@@ -36,6 +36,7 @@ seckill:
   mq:
     topic-order: seckill-order-topic
     topic-order-delay: seckill-order-delay-topic
+    topic-inventory: seckill-inventory-topic
 
 logging:
   level:

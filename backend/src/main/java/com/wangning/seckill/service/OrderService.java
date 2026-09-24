@@ -1,10 +1,10 @@
 package com.wangning.seckill.service;
 
-import com.wangning.seckill.entity.TicketOrder;
+import com.wangning.seckill.vo.OrderVO;
 
 import java.util.List;
 
 public interface OrderService {
-    List<TicketOrder> myOrders(Long userId);
-    TicketOrder getByRequestId(Long userId, String requestId);
+    List<OrderVO> myOrders(Long userId);
+    OrderVO getByRequestId(Long userId, String requestId);
 }

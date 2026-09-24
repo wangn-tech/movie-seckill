@@ -69,12 +69,24 @@ public class JwtUtil {
      * @return userId
      */
     public Long parseUserId(String token) {
-        Claims c = Jwts.parser()
+        Claims claims = parseClaims(token);
+        return claims.getSubject() == null ? null : Long.valueOf(claims.getSubject());
+    }
+
+    public Long parseAccessUserId(String token) {
+        Claims claims = parseClaims(token);
+        if (!"access".equals(claims.get("type"))) {
+            throw new IllegalArgumentException("不是AccessToken");
+        }
+        return Long.valueOf(claims.getSubject());
+    }
+
+    private Claims parseClaims(String token) {
+        return Jwts.parser()
                 .verifyWith(key)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
-        return Long.valueOf(c.getSubject());
     }
 
     /**
@@ -82,7 +94,7 @@ public class JwtUtil {
      */
     public boolean isRefreshToken(String token) {
         try {
-            Claims c = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
+            Claims c = parseClaims(token);
             return "refresh".equals(c.get("type"));
         } catch (Exception e) {
             return false;

@@ -41,7 +41,7 @@ public class OutboxRelayJob {
         for (OutboxEvent event : pending) {
             try {
                 Message msg = new Message(event.getTopic(), event.getEventType(),
-                        event.getId().toString(),
+                        event.getEventKey(),
                         event.getPayload().getBytes(StandardCharsets.UTF_8));
                 producer.send(msg);
 

@@ -12,7 +12,7 @@
 - **Outbox + RocketMQ 削峰**：抢座入口只写入 outbox_event，Relay 定时投递 MQ 异步落单；DB 扫描负责超时关单，释放事件幂等执行
 - **令牌桶限流**：Redis Lua 令牌桶 + AOP + 用户维度策略
 - **JWT 双 Token**：AccessToken(30min) + RefreshToken(7d) + ThreadLocal 用户上下文
-- **设计模式**：策略(限流粒度)、模板方法(缓存重建)、工厂(MQ事件路由)、观察者(订单后续)
+- **设计模式**：策略（限流粒度）、模板化缓存流程、进程内 single-flight、Outbox 可靠消息、订单状态机
 
 ## 技术栈
 
@@ -60,7 +60,7 @@ npm run dev
 │       ├── entity/ dto/ vo/
 │       ├── lua/            # Redis Lua 脚本
 │       ├── mq/              # RocketMQ producer/consumer
-│       ├── job/            # Outbox投递/订单超时/库存对账
+│       ├── job/            # Outbox投递/订单超时关单
 │       └── cache/          # 多级缓存/布隆过滤器
 ├── frontend/               # Next.js 前端
 ├── deploy/docker/          # Compose: MySQL/Redis/RocketMQ/Nginx
@@ -75,6 +75,26 @@ npm run dev
   → MySQL 条件更新 + 唯一索引兜底
   → 用户轮询订单 → 模拟支付 → 座位置已售
   → 超时未支付 → DB扫描关单 → Outbox释放事件 → Lua 返还库存
+```
+
+## 面试演示重点
+
+- **缓存击穿**：逻辑过期返回旧值，Redisson 负责跨实例重建锁，锁竞争后的数据库回源由进程内 single-flight 合并。
+- **可靠消息**：抢座入口只写 `outbox_event` 并立即返回 `PROCESSING`；Relay 以至少一次语义投递 RocketMQ，消费者和 Lua 补偿按 `requestId/event_key` 幂等。
+- **最终一致性边界**：MySQL `available_seats`、订单和 `seat_lock` 是最终事实；Redis 负责入口预扣与座位投影，启动预热和专用 reset 脚本用于重建投影。
+- **可验证证据**：`backend/src/test` 覆盖缓存并发回源、订单创建、支付和库存不足；`tests/performance/verify.sh` 校验专用场次库存、座位、requestId 和 Outbox。
+
+## 一键演示与验证
+
+```bash
+cp .env.example .env
+bash deploy/scripts/start-demo.sh
+bash tests/performance/run.sh read
+bash tests/performance/run.sh unique
+bash tests/performance/run.sh contention
+bash tests/performance/run.sh batch
+bash tests/performance/run.sh rate-limit
+bash tests/performance/verify.sh
 ```
 
 ## 默认测试账号

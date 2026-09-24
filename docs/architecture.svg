@@ -55,7 +55,7 @@
   <!-- Job -->
   <rect x="320" y="510" width="260" height="60" rx="8" fill="#64748b"/>
   <text x="450" y="535" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">定时任务</text>
-  <text x="450" y="555" text-anchor="middle" fill="#e2e8f0" font-size="11">Outbox投递 / 超时关单 / 库存对账</text>
+  <text x="450" y="555" text-anchor="middle" fill="#e2e8f0" font-size="11">Outbox投递 / 超时关单 / Redis投影预热</text>
 
   <!-- Arrows -->
   <line x1="450" y1="94" x2="450" y2="118" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>

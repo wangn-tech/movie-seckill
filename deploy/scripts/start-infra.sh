@@ -17,6 +17,10 @@ set +a
 export MYSQL_USER="${MYSQL_USER:-maoyan}"
 export MYSQL_PASSWORD="${MYSQL_PASSWORD:-maoyan-demo-password}"
 export MYSQL_DATABASE="${MYSQL_DATABASE:-movie_seckill}"
+if [ "$MYSQL_USER" = "root" ]; then
+  export MYSQL_USER=maoyan
+  export MYSQL_PASSWORD=maoyan-demo-password
+fi
 
 echo "=== 2. 启动中间件 ==="
 docker compose --env-file .env -p maoyan-infra -f deploy/docker/compose.infra.yml up -d
@@ -47,6 +51,25 @@ for i in $(seq 1 15); do
     break
   fi
   sleep 2
+done
+
+echo "=== 6. 等待 RocketMQ Topic 初始化 ==="
+for i in $(seq 1 30); do
+  topic_state=$(docker inspect --format '{{.State.Status}}:{{.State.ExitCode}}' maoyan-rocketmq-topic-init 2>/dev/null || true)
+  if [ "$topic_state" = "exited:0" ]; then
+    echo "✅ RocketMQ Topic 就绪"
+    break
+  fi
+  if [[ "$topic_state" == exited:* ]]; then
+    echo "❌ RocketMQ Topic 初始化失败：$topic_state"
+    docker logs maoyan-rocketmq-topic-init
+    exit 1
+  fi
+  if [ "$i" -eq 30 ]; then
+    echo "❌ RocketMQ Topic 初始化超时"
+    exit 1
+  fi
+  sleep 1
 done
 
 echo ""

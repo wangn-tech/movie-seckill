@@ -18,6 +18,10 @@ set +a
 export MYSQL_USER="${MYSQL_USER:-maoyan}"
 export MYSQL_PASSWORD="${MYSQL_PASSWORD:-maoyan-demo-password}"
 export MYSQL_DATABASE="${MYSQL_DATABASE:-movie_seckill}"
+if [[ "$MYSQL_USER" == "root" ]]; then
+  export MYSQL_USER=maoyan
+  export MYSQL_PASSWORD=maoyan-demo-password
+fi
 
 bash deploy/scripts/start-infra.sh
 docker compose --env-file .env -p maoyan-app -f deploy/docker/compose.app.yml up -d --build

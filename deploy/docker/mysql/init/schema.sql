@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS ticket_order (
   cinema_name VARCHAR(200),
   show_time   VARCHAR(30),
   seat_count  INT NOT NULL DEFAULT 1,
-  seats_info  VARCHAR(500),
+  seats_info  TEXT COMMENT '展示用座位摘要；权威明细存储于 order_seat',
   total_price DECIMAL(10,2),
   status      TINYINT DEFAULT 0 COMMENT '0待支付 1已支付 2已取消',
   expire_time DATETIME NOT NULL,
@@ -151,8 +151,8 @@ CREATE TABLE IF NOT EXISTS outbox_event (
 
 -- 两个演示用户，密码都是 123456 (BCrypt)
 INSERT INTO sys_user (account, password, nickname, balance) VALUES
-('13800000001', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDaQ', '用户一', 100000),
-('13800000002', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDaQ', '用户二', 100000);
+('13800000001', '$2a$10$BSdP2zKUyr6vRXAXfl5phuS9XPMogHNP.Quo1oI4g0Nu7.UEKujR.', '用户一', 100000),
+('13800000002', '$2a$10$BSdP2zKUyr6vRXAXfl5phuS9XPMogHNP.Quo1oI4g0Nu7.UEKujR.', '用户二', 100000);
 
 -- 电影
 INSERT INTO movie (name, poster, score, actors, genre, duration, description, status) VALUES
@@ -186,3 +186,19 @@ INSERT INTO movie_schedule (movie_id, cinema_id, hall_name, show_date, show_time
 (1, 2, '杜比厅', CURDATE(), '20:15', 120, 120, 10, 14, @aisles, 45.00),
 (2, 1, '普通厅', CURDATE(), '21:00', 120, 120, 10, 14, @aisles, 35.00),
 (3, 2, 'IMAX 厅', CURDATE(), '22:00', 120, 120, 10, 14, @aisles, 49.90);
+
+-- 压测专用隐藏电影与大场次，不出现在“正在热映”列表。
+-- 100x101 是座位图边界，第 51 列为过道，实际可售座位为 10,000。
+INSERT INTO movie (id, name, poster, score, actors, genre, duration, description, status) VALUES
+(9001, '核心链路压测专用', '/posters/cinema.svg', 0, '-', '测试', 1, '仅供 k6 使用', 2);
+
+WITH RECURSIVE perf_rows AS (
+  SELECT 1 AS row_num
+  UNION ALL
+  SELECT row_num + 1 FROM perf_rows WHERE row_num < 100
+)
+SELECT JSON_ARRAYAGG(JSON_OBJECT('row', row_num, 'col', 51)) INTO @perf_aisle FROM perf_rows;
+
+INSERT INTO movie_schedule (id, movie_id, cinema_id, hall_name, show_date, show_time,
+  total_seats, available_seats, seat_rows, seat_cols, unavailable_seats, price) VALUES
+(9001, 9001, 1, '压测厅', CURDATE(), '23:59', 10000, 10000, 100, 101, @perf_aisle, 1.00);

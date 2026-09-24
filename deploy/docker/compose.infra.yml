@@ -101,7 +101,9 @@ services:
       - "10909:10909"
     environment:
       NAMESRV_ADDR: rocketmq-namesrv:9876
-      JAVA_OPT_EXT: "-Xms128m -Xmx256m -Xmn64m -XX:MaxDirectMemorySize=128m"
+      # 5.1.4 镜像的 JDK 8u372 在部分 cgroup v2 主机读取指标会 NPE，
+      # StoreUtil 因而无法初始化；堆/直接内存已显式限制，可安全关闭该探测。
+      JAVA_OPT_EXT: "-Xms128m -Xmx256m -Xmn64m -XX:MaxDirectMemorySize=128m -XX:-UseContainerSupport"
     volumes:
       - rocketmq-broker-data:/home/rocketmq/data
       - rocketmq-broker-logs:/home/rocketmq/logs
@@ -117,6 +119,30 @@ services:
       rocketmq-init:
         condition: service_completed_successfully
       rocketmq-namesrv:
+        condition: service_healthy
+    networks:
+      - maoyan-net
+
+  rocketmq-topic-init:
+    image: apache/rocketmq:5.1.4
+    container_name: maoyan-rocketmq-topic-init
+    command:
+      - sh
+      - -c
+      - >-
+        until ./mqadmin clusterList -n rocketmq-namesrv:9876 2>/dev/null
+        | grep -q broker-a; do sleep 1; done &&
+        ./mqadmin updateTopic -n rocketmq-namesrv:9876 -c DefaultCluster
+        -t seckill-order-topic -r 4 -w 4 &&
+        ./mqadmin updateTopic -n rocketmq-namesrv:9876 -c DefaultCluster
+        -t seckill-inventory-topic -r 4 -w 4 &&
+        ./mqadmin topicRoute -n rocketmq-namesrv:9876
+        -t seckill-order-topic | grep -q broker-a &&
+        ./mqadmin topicRoute -n rocketmq-namesrv:9876
+        -t seckill-inventory-topic | grep -q broker-a
+    restart: "no"
+    depends_on:
+      rocketmq-broker:
         condition: service_healthy
     networks:
       - maoyan-net

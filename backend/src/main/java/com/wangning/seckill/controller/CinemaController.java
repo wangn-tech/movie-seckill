@@ -1,8 +1,8 @@
 package com.wangning.seckill.controller;
 
 import com.wangning.seckill.common.result.Result;
-import com.wangning.seckill.entity.Cinema;
 import com.wangning.seckill.service.CinemaService;
+import com.wangning.seckill.vo.CinemaVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +22,7 @@ public class CinemaController {
 
     @Operation(summary = "影院列表")
     @GetMapping
-    public Result<List<Cinema>> list() {
-        return Result.success(cinemaService.list());
+    public Result<List<CinemaVO>> list() {
+        return Result.success(cinemaService.list().stream().map(CinemaVO::from).toList());
     }
 }

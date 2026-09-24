@@ -1,8 +1,8 @@
 package com.wangning.seckill.controller;
 
 import com.wangning.seckill.common.result.Result;
-import com.wangning.seckill.entity.Movie;
 import com.wangning.seckill.service.MovieService;
+import com.wangning.seckill.vo.MovieVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -20,13 +20,13 @@ public class MovieController {
 
     @Operation(summary = "正在热映电影列表")
     @GetMapping("/hot")
-    public Result<List<Movie>> hot() {
-        return Result.success(movieService.hotMovies());
+    public Result<List<MovieVO>> hot() {
+        return Result.success(movieService.hotMovies().stream().map(MovieVO::from).toList());
     }
 
     @Operation(summary = "电影详情")
     @GetMapping("/{id}")
-    public Result<Movie> detail(@PathVariable Long id) {
-        return Result.success(movieService.detail(id));
+    public Result<MovieVO> detail(@PathVariable Long id) {
+        return Result.success(MovieVO.from(movieService.detail(id)));
     }
 }

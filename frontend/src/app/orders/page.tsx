@@ -20,7 +20,18 @@ export default function OrdersPage() {
   const hydrated = useAuthStore((state) => state.hydrated);
   const [paying, setPaying] = useState('');
   const [notice, setNotice] = useState('');
-  const { data: orders, error, isLoading, mutate } = useSWR<Order[]>(accessToken ? '/orders' : null, getData);
+  const [now, setNow] = useState(() => Date.now());
+  const { data: orders, error, isLoading, mutate } = useSWR<Order[]>(accessToken ? '/orders' : null, getData, {
+    // 只有待支付订单需要轮询，已支付订单不制造无意义请求。
+    refreshInterval: (latestOrders) => latestOrders?.some((order) => order.status === 0) ? 5_000 : 0,
+  });
+  const hasPendingOrders = orders?.some((order) => order.status === 0) ?? false;
+
+  useEffect(() => {
+    if (!hasPendingOrders) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [hasPendingOrders]);
 
   useEffect(() => {
     if (hydrated && !accessToken) router.replace('/login');
@@ -40,6 +51,14 @@ export default function OrdersPage() {
     }
   };
 
+  const remainingLabel = (expireTime: string) => {
+    const remaining = new Date(expireTime.replace(' ', 'T')).getTime() - now;
+    if (remaining <= 0) return '已过期，等待系统自动关单';
+    const minutes = Math.floor(remaining / 60_000);
+    const seconds = Math.floor((remaining % 60_000) / 1_000).toString().padStart(2, '0');
+    return `剩余 ${minutes} 分 ${seconds} 秒`;
+  };
+
   if (!hydrated || isLoading) return <div className="h-72 animate-pulse rounded-3xl bg-zinc-200" />;
 
   return (
@@ -50,6 +69,7 @@ export default function OrdersPage() {
             <p className="text-xs font-semibold text-red-600">MY ORDERS</p>
             <h1 className="mt-1 text-3xl font-black">我的订单</h1>
             <p className="mt-2 text-sm text-zinc-500">订单由 RocketMQ 异步创建，支付与超时释放通过 Outbox 保证最终一致。</p>
+            {hasPendingOrders ? <p className="mt-1 text-xs text-amber-600">待支付订单每 5 秒自动刷新</p> : null}
           </div>
           <button onClick={() => mutate()} disabled={isLoading}
             className="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-600 transition hover:border-red-200 hover:text-red-600 disabled:opacity-50">
@@ -79,7 +99,7 @@ export default function OrdersPage() {
                 <p className="mt-2 text-sm text-zinc-500">{order.cinemaName} · {order.showTime}</p>
                 <p className="mt-1 text-sm text-zinc-500">{order.seatsInfo} · 共 {order.seatCount} 座</p>
                 <p className="mt-3 text-xs text-zinc-400">订单号 {order.orderNo}</p>
-                {order.status === 0 ? <p className="mt-1 text-xs text-amber-600">请在订单过期前完成支付</p> : null}
+                {order.status === 0 ? <p className="mt-1 text-xs text-amber-600">{remainingLabel(order.expireTime)}</p> : null}
               </div>
               <div className="mt-5 flex items-center justify-between gap-5 border-t border-zinc-100 pt-4 sm:mt-0 sm:block sm:border-0 sm:pt-0 sm:text-right">
                 <p className="text-2xl font-black text-red-600">¥{order.totalPrice}</p>

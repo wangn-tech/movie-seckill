@@ -31,6 +31,7 @@ public class OrderCreationService {
 
     @Transactional(rollbackFor = Exception.class)
     public void create(OrderCreateEvent event) {
+        // 这是 MySQL 的最终一致性闸门：Redis 已预扣不代表订单一定成功，所有 DB 写入必须同事务提交。
         TicketOrder existing = orderMapper.selectOne(new LambdaQueryWrapper<TicketOrder>()
                 .eq(TicketOrder::getLockToken, event.requestId()));
         if (existing != null) {
@@ -47,6 +48,7 @@ public class OrderCreationService {
         }
 
         int seatCount = event.seats().size();
+        // 条件更新防止 Redis/DB 短暂偏差时出现负库存。
         int updated = scheduleMapper.deductStock(event.scheduleId(), seatCount);
         if (updated == 0) {
             throw new IllegalStateException("MySQL库存不足");

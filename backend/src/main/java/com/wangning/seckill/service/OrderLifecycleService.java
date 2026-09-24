@@ -36,6 +36,7 @@ public class OrderLifecycleService {
 
     @Transactional(rollbackFor = Exception.class)
     public boolean cancelExpired(Long orderId) {
+        // 先用订单状态 CAS 抢取消权；定时任务重复扫描或并发支付都只能有一个请求进入补偿。
         TicketOrder order = orderMapper.selectById(orderId);
         if (order == null || order.getStatus() != 0) {
             return false;
@@ -49,6 +50,7 @@ public class OrderLifecycleService {
             return false;
         }
 
+        // MySQL 库存是最终事实，Redis 释放放入 Outbox，避免 DB 已提交而 Redis 未恢复。
         scheduleMapper.update(null, new LambdaUpdateWrapper<Schedule>()
                 .eq(Schedule::getId, order.getScheduleId())
                 .setSql("available_seats = available_seats + " + order.getSeatCount()));

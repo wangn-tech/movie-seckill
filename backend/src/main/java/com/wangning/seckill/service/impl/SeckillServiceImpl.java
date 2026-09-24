@@ -53,6 +53,7 @@ public class SeckillServiceImpl implements SeckillService {
 
     @Override
     public SeckillStatusVO seize(Long userId, SeckillReq req) {
+        // 热路径只做轻量校验和 Redis 原子预扣，不等待数据库落单或 MQ 响应。
         Long scheduleId = req.scheduleId();
         if (!bloom.mightContainSchedule(scheduleId)) {
             throw new BizException(ResultCode.NOT_FOUND, "场次不存在");
@@ -72,6 +73,7 @@ public class SeckillServiceImpl implements SeckillService {
         validateSeats(schedule, seats);
 
         String fingerprint = fingerprint(userId, scheduleId, seats);
+        // Lua 同时完成 requestId 幂等、座位冲突、库存预扣和座位 TTL 锁定。
         long result = redisSeatService.reserve(userId, scheduleId, req.requestId(), fingerprint,
                 seats, SEAT_LOCK_TTL, RESERVATION_TTL);
 
@@ -88,6 +90,7 @@ public class SeckillServiceImpl implements SeckillService {
             throw new BizException(ResultCode.REDIS_ERROR);
         }
 
+        // 只写本地 Outbox，Relay 负责至少一次投递；前端随后轮询 PROCESSING 状态。
         ensureOutbox(userId, scheduleId, req.requestId(), seats, result == 1);
         return SeckillStatusVO.processing(req.requestId());
     }

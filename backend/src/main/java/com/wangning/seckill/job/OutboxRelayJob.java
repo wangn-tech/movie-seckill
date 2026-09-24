@@ -42,6 +42,7 @@ public class OutboxRelayJob {
             int currentRetry = event.getRetryCount() == null ? 0 : event.getRetryCount();
             int maxRetry = event.getMaxRetry() == null ? 10 : event.getMaxRetry();
             try {
+                // 允许 MQ 重复投递，消费者必须按 event_key 幂等；DB 更新条件避免旧快照覆盖新状态。
                 Message msg = new Message(event.getTopic(), event.getEventType(),
                         event.getEventKey(),
                         event.getPayload().getBytes(StandardCharsets.UTF_8));

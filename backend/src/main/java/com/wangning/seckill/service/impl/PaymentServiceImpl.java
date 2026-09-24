@@ -60,14 +60,20 @@ public class PaymentServiceImpl implements PaymentService {
         if (order == null) {
             throw new BizException(ResultCode.ORDER_NOT_FOUND);
         }
-        if (order.getStatus() != 0) {
+        // 支付按钮可能因网络重试重复提交；已支付订单直接返回，避免重复扣款。
+        if (Integer.valueOf(1).equals(order.getStatus())) {
+            log.info("重复支付请求幂等返回 orderNo={}, userId={}", orderNo, userId);
+            return;
+        }
+        if (!Integer.valueOf(0).equals(order.getStatus())) {
             throw new BizException(ResultCode.ORDER_STATUS_ILLEGAL);
         }
         if (order.getExpireTime() == null || order.getExpireTime().isBefore(LocalDateTime.now())) {
             throw new BizException(ResultCode.ORDER_STATUS_ILLEGAL, "订单已超时，请重新选座");
         }
 
-        // 2. CAS 扣余额（元转分，四舍五入，避免精度丢失）
+        // 2. CAS 扣余额（元转分，四舍五入，避免精度丢失）。
+        // SQL 条件 ge(balance, cents) 把并发支付下的余额校验交给数据库原子完成。
         int cents = order.getTotalPrice()
                 .multiply(BigDecimal.valueOf(100))
                 .setScale(0, java.math.RoundingMode.HALF_UP)
@@ -81,7 +87,7 @@ public class PaymentServiceImpl implements PaymentService {
             throw new BizException(ResultCode.BALANCE_NOT_ENOUGH);
         }
 
-        // 3. CAS 更新订单状态：0→1
+        // 3. CAS 更新订单状态：0→1；只有一个并发请求能成功推进状态。
         int orderUpdated = orderMapper.update(null,
                 new LambdaUpdateWrapper<TicketOrder>()
                         .eq(TicketOrder::getId, order.getId())
@@ -92,7 +98,7 @@ public class PaymentServiceImpl implements PaymentService {
             throw new BizException(ResultCode.ORDER_STATUS_ILLEGAL);
         }
 
-        // 4. seat_lock 标记已售
+        // 4. DB 座位锁先标记已售，Redis 投影由下方 Outbox 异步确认。
         seatLockMapper.update(null,
                 new LambdaUpdateWrapper<SeatLock>()
                         .eq(SeatLock::getScheduleId, order.getScheduleId())

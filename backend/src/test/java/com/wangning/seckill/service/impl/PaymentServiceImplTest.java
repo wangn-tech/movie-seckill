@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -38,6 +39,24 @@ class PaymentServiceImplTest {
         assertThatThrownBy(() -> service.pay(7L, "SO-expired"))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("超时");
+        verifyNoInteractions(userMapper, seatLockMapper, orderSeatMapper, outboxMapper);
+    }
+
+    @Test
+    void repeatedPaymentForPaidOrderIsIdempotent() {
+        TicketOrderMapper orderMapper = mock(TicketOrderMapper.class);
+        UserMapper userMapper = mock(UserMapper.class);
+        SeatLockMapper seatLockMapper = mock(SeatLockMapper.class);
+        OrderSeatMapper orderSeatMapper = mock(OrderSeatMapper.class);
+        OutboxEventMapper outboxMapper = mock(OutboxEventMapper.class);
+        PaymentServiceImpl service = new PaymentServiceImpl(orderMapper, userMapper, seatLockMapper,
+                orderSeatMapper, outboxMapper, new ObjectMapper());
+
+        TicketOrder order = new TicketOrder();
+        order.setStatus(1);
+        when(orderMapper.selectOne(any())).thenReturn(order);
+
+        assertThatCode(() -> service.pay(7L, "SO-paid")).doesNotThrowAnyException();
         verifyNoInteractions(userMapper, seatLockMapper, orderSeatMapper, outboxMapper);
     }
 }

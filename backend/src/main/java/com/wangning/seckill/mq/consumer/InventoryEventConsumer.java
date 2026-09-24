@@ -29,6 +29,7 @@ public class InventoryEventConsumer implements RocketMQListener<String> {
     public void onMessage(String message) {
         try {
             InventoryEvent event = objectMapper.readValue(message, InventoryEvent.class);
+            // MQ 至少一次投递，CONFIRM/RELEASE 脚本必须依赖 event_key、requestId 和 marker 保证重复消费安全。
             if ("CONFIRM".equals(event.action())) {
                 redisSeatService.confirm(event.userId(), event.scheduleId(), event.requestId(),
                         event.orderNo(), event.seats());
@@ -38,6 +39,7 @@ public class InventoryEventConsumer implements RocketMQListener<String> {
             } else {
                 throw new IllegalArgumentException("未知库存事件: " + event.action());
             }
+            // 只有 Redis 补偿成功后才推进 Outbox 处理状态，失败抛异常交给 RocketMQ 重试。
             outboxMapper.update(null, new LambdaUpdateWrapper<OutboxEvent>()
                     .eq(OutboxEvent::getEventKey, event.eventKey())
                     .set(OutboxEvent::getProcessStatus, "SUCCEEDED")

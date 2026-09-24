@@ -12,6 +12,7 @@
 - **Outbox + RocketMQ 削峰**：抢座入口只写入 outbox_event，Relay 定时投递 MQ 异步落单；DB 扫描负责超时关单，释放事件幂等执行
 - **令牌桶限流**：Redis Lua 令牌桶 + AOP + 用户维度策略
 - **JWT 双 Token**：AccessToken(30min) + RefreshToken(7d) + ThreadLocal 用户上下文
+- **支付幂等与状态机**：余额 CAS 扣减、订单 `0→1` CAS、重复支付安全返回，支付确认通过 Outbox 异步更新 Redis 座位投影
 - **设计模式**：策略（限流粒度）、模板化缓存流程、进程内 single-flight、Outbox 可靠消息、订单状态机
 
 ## 技术栈

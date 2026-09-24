@@ -9,7 +9,7 @@
 - **Redis + Lua 原子抢座**：一次脚本完成 requestId 幂等、座位冲突检查、库存预扣、座位锁定，杜绝超卖和座位重售
 - **三层防超卖**：Redis Lua 预扣 → MySQL `UPDATE ... WHERE available>=n` 条件更新 → `seat_lock UNIQUE(schedule_id,row,col)` 唯一索引兜底
 - **多级缓存**：Caffeine L1 + Redis L2 + 布隆过滤器 + 空值缓存 + 逻辑过期 + Redisson 异步重建，覆盖缓存穿透/击穿/雪崩
-- **Outbox + RocketMQ 削峰**：订单与 outbox_event 同事务写入，MQ 异步落单把瞬时洪峰摊平；RocketMQ 5 定时消息 + DB 扫描双兜底关单
+- **Outbox + RocketMQ 削峰**：抢座入口只写入 outbox_event，Relay 定时投递 MQ 异步落单；DB 扫描负责超时关单，释放事件幂等执行
 - **令牌桶限流**：Redis Lua 令牌桶 + AOP + 用户维度策略
 - **JWT 双 Token**：AccessToken(30min) + RefreshToken(7d) + ThreadLocal 用户上下文
 - **设计模式**：策略(限流粒度)、模板方法(缓存重建)、工厂(MQ事件路由)、观察者(订单后续)
@@ -74,7 +74,7 @@ npm run dev
   → 立即返回"排队中" → RocketMQ 异步落单
   → MySQL 条件更新 + 唯一索引兜底
   → 用户轮询订单 → 模拟支付 → 座位置已售
-  → 超时未支付 → MQ定时消息 + DB扫描关单 → Lua 返还库存
+  → 超时未支付 → DB扫描关单 → Outbox释放事件 → Lua 返还库存
 ```
 
 ## 默认测试账号

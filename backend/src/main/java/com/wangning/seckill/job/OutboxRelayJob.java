@@ -54,9 +54,11 @@ public class OutboxRelayJob {
                                 .eq(OutboxEvent::getStatus, "PENDING")
                                 .eq(OutboxEvent::getRetryCount, currentRetry)
                                 .set(OutboxEvent::getStatus, "SENT")
+                                .set(OutboxEvent::getFailReason, null)
                                 .set(OutboxEvent::getSentTime, LocalDateTime.now()));
             } catch (Exception e) {
-                log.error("Outbox 投递失败 id={}", event.getId(), e);
+                String reason = diagnosticReason(e);
+                log.error("Outbox 投递失败 id={}, reason={}", event.getId(), reason);
                 int retry = currentRetry + 1;
                 String status = retry >= maxRetry ? "DEAD" : "PENDING";
                 outboxMapper.update(null,
@@ -65,8 +67,17 @@ public class OutboxRelayJob {
                                 .eq(OutboxEvent::getStatus, "PENDING")
                                 .eq(OutboxEvent::getRetryCount, currentRetry)
                                 .set(OutboxEvent::getRetryCount, retry)
-                                .set(OutboxEvent::getStatus, status));
+                                .set(OutboxEvent::getStatus, status)
+                                .set(OutboxEvent::getProcessStatus, "DEAD".equals(status) ? "FAILED" : event.getProcessStatus())
+                                .set(OutboxEvent::getFailReason, reason));
             }
         }
+    }
+
+    private String diagnosticReason(Exception exception) {
+        String message = exception.getMessage();
+        String reason = exception.getClass().getSimpleName()
+                + (message == null || message.isBlank() ? "" : ": " + message);
+        return reason.length() <= 480 ? reason : reason.substring(0, 480);
     }
 }

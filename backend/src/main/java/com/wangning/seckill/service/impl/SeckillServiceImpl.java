@@ -112,6 +112,11 @@ public class SeckillServiceImpl implements SeckillService {
                     event.getFailReason() == null ? ResultCode.ORDER_PROCESSING_FAILED.getMessage() : event.getFailReason(),
                     null);
         }
+        if ("DEAD".equals(event.getStatus())) {
+            return new SeckillStatusVO(requestId, "FAILED",
+                    event.getFailReason() == null ? ResultCode.ORDER_PROCESSING_FAILED.getMessage() : event.getFailReason(),
+                    null);
+        }
         return SeckillStatusVO.processing(requestId);
     }
 

@@ -25,10 +25,14 @@ export default function Home() {
               <span key={label} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">{label}</span>
             ))}
           </div>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link href="#movies" className="rounded-xl bg-red-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-red-500">开始选座</Link>
+            <Link href="/orders" className="rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-white/10">查看订单</Link>
+          </div>
         </div>
       </section>
 
-      <section>
+      <section id="movies">
         <div className="mb-5 flex items-end justify-between">
           <div>
             <p className="text-sm font-semibold text-red-600">NOW SHOWING</p>

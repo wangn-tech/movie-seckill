@@ -27,7 +27,7 @@ export default function LoginPage() {
       const next = typeof window !== 'undefined'
         ? new URLSearchParams(window.location.search).get('next')
         : null;
-      router.push(next?.startsWith('/') ? next : '/');
+      router.push(next?.startsWith('/') && !next.startsWith('//') ? next : '/');
     } catch (loginError) {
       setError(errorMessage(loginError, '登录失败'));
     } finally {

@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.UUID;
 
 @Slf4j
@@ -33,6 +34,9 @@ public class OrderCreationService {
         TicketOrder existing = orderMapper.selectOne(new LambdaQueryWrapper<TicketOrder>()
                 .eq(TicketOrder::getLockToken, event.requestId()));
         if (existing != null) {
+            if (!sameRequest(existing, event)) {
+                throw new IllegalStateException("requestId 已用于其他订单");
+            }
             markSucceeded(event.requestId());
             return;
         }
@@ -107,5 +111,20 @@ public class OrderCreationService {
                 .eq(OutboxEvent::getEventKey, requestId)
                 .set(OutboxEvent::getProcessStatus, "SUCCEEDED")
                 .set(OutboxEvent::getFailReason, null));
+    }
+
+    private boolean sameRequest(TicketOrder existing, OrderCreateEvent event) {
+        if (!event.userId().equals(existing.getUserId())
+                || !event.scheduleId().equals(existing.getScheduleId())
+                || event.seats().size() != existing.getSeatCount()) {
+            return false;
+        }
+        String seatsInfo = event.seats().stream()
+                .sorted(Comparator.comparingInt(SeckillReq.Seat::row)
+                        .thenComparingInt(SeckillReq.Seat::col))
+                .map(seat -> seat.row() + "排" + seat.col() + "座")
+                .reduce((left, right) -> left + "," + right)
+                .orElse("");
+        return seatsInfo.equals(existing.getSeatsInfo());
     }
 }

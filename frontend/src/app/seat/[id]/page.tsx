@@ -53,15 +53,15 @@ export default function SeatPage({ params }: { params: { id: string } }) {
   };
 
   const pollOrder = async (requestId: string) => {
-    for (let attempt = 1; attempt <= 20; attempt += 1) {
+    for (let attempt = 1; attempt <= 30; attempt += 1) {
       await wait(500);
       let status: SeckillStatus;
       try {
         status = await getData<SeckillStatus>(`/seckill/requests/${requestId}`);
       } catch (pollError) {
         const statusCode = (pollError as { response?: { status?: number } }).response?.status;
-        if (statusCode === 404 && attempt < 20) {
-          setProgress(`订单入口处理中 ${attempt}/20`);
+        if (statusCode === 404 && attempt < 30) {
+          setProgress(`订单入口处理中 ${attempt}/30`);
           continue;
         }
         throw pollError;
@@ -71,7 +71,7 @@ export default function SeatPage({ params }: { params: { id: string } }) {
         return;
       }
       if (status.status === 'FAILED') throw new Error(status.message);
-      setProgress(`订单异步落库中 ${attempt}/20`);
+      setProgress(`订单异步落库中 ${attempt}/30`);
     }
     setSubmitting(false);
     setProgress('订单仍在处理中，可前往订单页稍后查看');

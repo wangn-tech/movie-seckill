@@ -45,9 +45,17 @@ export default function OrdersPage() {
   return (
     <div className="space-y-6">
       <header>
-        <p className="text-xs font-semibold text-red-600">MY ORDERS</p>
-        <h1 className="mt-1 text-3xl font-black">我的订单</h1>
-        <p className="mt-2 text-sm text-zinc-500">订单由 RocketMQ 异步创建，支付与超时释放通过 Outbox 保证最终一致。</p>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold text-red-600">MY ORDERS</p>
+            <h1 className="mt-1 text-3xl font-black">我的订单</h1>
+            <p className="mt-2 text-sm text-zinc-500">订单由 RocketMQ 异步创建，支付与超时释放通过 Outbox 保证最终一致。</p>
+          </div>
+          <button onClick={() => mutate()} disabled={isLoading}
+            className="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-600 transition hover:border-red-200 hover:text-red-600 disabled:opacity-50">
+            刷新订单
+          </button>
+        </div>
       </header>
       {notice ? <div className="rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">{notice}</div> : null}
       {error ? <div className="rounded-xl bg-red-50 p-5 text-red-700">订单加载失败。<button onClick={() => mutate()} className="ml-2 underline">重试</button></div> : null}
@@ -71,6 +79,7 @@ export default function OrdersPage() {
                 <p className="mt-2 text-sm text-zinc-500">{order.cinemaName} · {order.showTime}</p>
                 <p className="mt-1 text-sm text-zinc-500">{order.seatsInfo} · 共 {order.seatCount} 座</p>
                 <p className="mt-3 text-xs text-zinc-400">订单号 {order.orderNo}</p>
+                {order.status === 0 ? <p className="mt-1 text-xs text-amber-600">请在订单过期前完成支付</p> : null}
               </div>
               <div className="mt-5 flex items-center justify-between gap-5 border-t border-zinc-100 pt-4 sm:mt-0 sm:block sm:border-0 sm:pt-0 sm:text-right">
                 <p className="text-2xl font-black text-red-600">¥{order.totalPrice}</p>

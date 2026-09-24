@@ -33,13 +33,13 @@ export function cachedReads() {
   const response = http.get(`${baseUrl}/movies/hot`, { tags: { kind: 'hot' } });
   let body;
   try { body = response.json(); } catch (_) { body = null; }
-  const ok = check(response, { 'hot movies succeeds': (r) => r.status === 200 && body?.code === 0 });
+  const ok = check(response, { 'hot movies succeeds': (r) => r.status === 200 && body && body.code === 0 });
   businessSuccess.add(ok);
   readLatency.add(response.timings.duration, { kind: 'hot' });
 }
 
 export function invalidIds() {
-  const response = http.get(`${baseUrl}/movies/${8_000_000 + __VU * 10_000 + __ITER}`, {
+  const response = http.get(`${baseUrl}/movies/${8000000 + __VU * 10000 + __ITER}`, {
     tags: { kind: 'invalid' },
   });
   const rejected = response.status === 404;

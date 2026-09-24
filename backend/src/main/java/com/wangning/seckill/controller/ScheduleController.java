@@ -1,6 +1,8 @@
 package com.wangning.seckill.controller;
 
 import com.wangning.seckill.common.result.Result;
+import com.wangning.seckill.common.exception.BizException;
+import com.wangning.seckill.common.exception.ResultCode;
 import com.wangning.seckill.service.ScheduleService;
 import com.wangning.seckill.vo.ScheduleVO;
 import com.wangning.seckill.vo.SeatLayoutVO;
@@ -29,7 +31,11 @@ public class ScheduleController {
     @Operation(summary = "场次详情")
     @GetMapping("/{id}")
     public Result<ScheduleVO> detail(@PathVariable Long id) {
-        return Result.success(ScheduleVO.from(scheduleService.detail(id)));
+        ScheduleVO schedule = ScheduleVO.from(scheduleService.detail(id));
+        if (schedule == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "场次不存在");
+        }
+        return Result.success(schedule);
     }
 
     @Operation(summary = "场次座位图：返回每个座位状态")

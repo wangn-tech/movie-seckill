@@ -1,6 +1,8 @@
 package com.wangning.seckill.controller;
 
 import com.wangning.seckill.common.result.Result;
+import com.wangning.seckill.common.exception.BizException;
+import com.wangning.seckill.common.exception.ResultCode;
 import com.wangning.seckill.service.MovieService;
 import com.wangning.seckill.vo.MovieVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,6 +29,10 @@ public class MovieController {
     @Operation(summary = "电影详情")
     @GetMapping("/{id}")
     public Result<MovieVO> detail(@PathVariable Long id) {
-        return Result.success(MovieVO.from(movieService.detail(id)));
+        MovieVO movie = MovieVO.from(movieService.detail(id));
+        if (movie == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "电影不存在");
+        }
+        return Result.success(movie);
     }
 }

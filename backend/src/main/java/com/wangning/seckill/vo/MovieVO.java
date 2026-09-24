@@ -17,6 +17,9 @@ public record MovieVO(
         Integer status
 ) {
     public static MovieVO from(Movie movie) {
+        if (movie == null) {
+            return null;
+        }
         return new MovieVO(movie.getId(), movie.getName(), movie.getPoster(), movie.getScore(),
                 movie.getActors(), movie.getGenre(), movie.getDuration(), movie.getDescription(), movie.getStatus());
     }

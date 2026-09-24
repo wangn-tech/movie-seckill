@@ -21,6 +21,9 @@ public record ScheduleVO(
         Integer status
 ) {
     public static ScheduleVO from(Schedule schedule) {
+        if (schedule == null) {
+            return null;
+        }
         return new ScheduleVO(schedule.getId(), schedule.getMovieId(), schedule.getCinemaId(),
                 schedule.getHallName(), schedule.getShowDate(), schedule.getShowTime(), schedule.getTotalSeats(),
                 schedule.getAvailableSeats(), schedule.getSeatRows(), schedule.getSeatCols(), schedule.getPrice(),

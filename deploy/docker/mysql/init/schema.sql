@@ -156,9 +156,9 @@ INSERT INTO sys_user (account, password, nickname, balance) VALUES
 
 -- 电影
 INSERT INTO movie (name, poster, score, actors, genre, duration, description, status) VALUES
-('流浪地球3', '/poster/ll3.jpg', 9.5, '吴京/刘德华', '科幻/冒险', 173, '太阳即将毁灭，人类带着地球逃离太阳系。', 1),
-('唐探2026', '/poster/t26.jpg', 7.2, '王宝强/刘昊然', '喜剧/悬疑', 136, '唐仁秦风再探曼谷奇案。', 1),
-('沙丘3', '/poster/dune3.jpg', 8.9, '甜茶/赞达亚', '科幻/剧情', 155, '弗雷曼人的最终战争。', 1);
+('流浪地球3', '/posters/earth.svg', 9.5, '吴京/刘德华', '科幻/冒险', 173, '太阳即将毁灭，人类带着地球逃离太阳系。', 1),
+('唐探2026', '/posters/detective.svg', 7.2, '王宝强/刘昊然', '喜剧/悬疑', 136, '唐仁秦风再探曼谷奇案。', 1),
+('沙丘3', '/posters/dune.svg', 8.9, '甜茶/赞达亚', '科幻/剧情', 155, '弗雷曼人的最终战争。', 1);
 
 -- 影院
 INSERT INTO cinema (name, address, city) VALUES

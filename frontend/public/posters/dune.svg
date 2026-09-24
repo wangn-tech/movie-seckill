@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 800">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#451a03"/><stop offset=".55" stop-color="#d97706"/><stop offset="1" stop-color="#27272a"/></linearGradient></defs>
+  <rect width="600" height="800" fill="url(#g)"/><circle cx="300" cy="260" r="150" fill="#fef3c7" opacity=".35"/><path d="M0 520Q150 430 300 540T600 500V800H0z" fill="#422006" opacity=".75"/><text x="70" y="665" fill="white" font-size="78" font-weight="700">沙丘 3</text><text x="74" y="718" fill="#fef3c7" font-size="26" letter-spacing="12">DUNE</text>
+</svg>

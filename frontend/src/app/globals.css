@@ -1,4 +1,30 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-body { background: #f5f5f5; }
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background:
+    radial-gradient(circle at 10% 0%, rgb(254 226 226 / 45%), transparent 28rem),
+    #fafafa;
+}
+
+button, a, input {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid rgb(252 165 165);
+  outline-offset: 2px;
+}
+
+.card-shadow {
+  box-shadow: 0 18px 50px -28px rgb(24 24 27 / 35%);
+}

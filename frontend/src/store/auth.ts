@@ -1,12 +1,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { AuthPayload } from '@/types/api';
 
 interface AuthState {
   userId: number | null;
   nickname: string;
   accessToken: string;
   refreshToken: string;
-  setTokens: (t: { userId: number; nickname: string; accessToken: string; refreshToken: string }) => void;
+  hydrated: boolean;
+  setTokens: (tokens: AuthPayload) => void;
+  setHydrated: () => void;
   logout: () => void;
 }
 
@@ -17,9 +20,16 @@ export const useAuthStore = create<AuthState>()(
       nickname: '',
       accessToken: '',
       refreshToken: '',
-      setTokens: (t) => set(t),
+      hydrated: false,
+      setTokens: (tokens) => set(tokens),
+      setHydrated: () => set({ hydrated: true }),
       logout: () => set({ userId: null, nickname: '', accessToken: '', refreshToken: '' }),
     }),
-    { name: 'seckill-auth' }
-  )
+    {
+      name: 'seckill-auth',
+      version: 1,
+      partialize: ({ hydrated: _hydrated, ...state }) => state,
+      onRehydrateStorage: () => (state) => state?.setHydrated(),
+    },
+  ),
 );

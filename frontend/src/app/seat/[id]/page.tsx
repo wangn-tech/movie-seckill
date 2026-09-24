@@ -35,6 +35,14 @@ export default function SeatPage({ params }: { params: { id: string } }) {
   const selectedSet = useMemo(() => new Set(selected.map((seat) => keyOf(seat.row, seat.col))), [selected]);
   const totalPrice = ((layout?.price ?? schedule?.price ?? 0) * selected.length).toFixed(2);
 
+  useEffect(() => {
+    if (!layout) return;
+    setSelected((current) => current.filter((seat) => {
+      const key = keyOf(seat.row, seat.col);
+      return !unavailable.has(key) && !locked.has(key);
+    }));
+  }, [layout, unavailable, locked]);
+
   const toggle = (row: number, col: number) => {
     const key = keyOf(row, col);
     if (unavailable.has(key) || locked.has(key) || submitting) return;
@@ -47,7 +55,17 @@ export default function SeatPage({ params }: { params: { id: string } }) {
   const pollOrder = async (requestId: string) => {
     for (let attempt = 1; attempt <= 20; attempt += 1) {
       await wait(500);
-      const status = await getData<SeckillStatus>(`/seckill/requests/${requestId}`);
+      let status: SeckillStatus;
+      try {
+        status = await getData<SeckillStatus>(`/seckill/requests/${requestId}`);
+      } catch (pollError) {
+        const statusCode = (pollError as { response?: { status?: number } }).response?.status;
+        if (statusCode === 404 && attempt < 20) {
+          setProgress(`订单入口处理中 ${attempt}/20`);
+          continue;
+        }
+        throw pollError;
+      }
       if (status.status === 'CREATED') {
         router.push('/orders');
         return;

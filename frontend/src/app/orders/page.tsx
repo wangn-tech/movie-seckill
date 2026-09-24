@@ -60,7 +60,7 @@ export default function OrdersPage() {
       ) : null}
       <div className="grid gap-4">
         {(orders ?? []).map((order) => {
-          const status = STATUS[order.status];
+          const status = STATUS[order.status] ?? { label: '未知状态', style: 'bg-zinc-100 text-zinc-500' };
           return (
             <article key={order.id} className="rounded-2xl border border-zinc-200 bg-white p-5 card-shadow sm:flex sm:items-center sm:justify-between">
               <div>

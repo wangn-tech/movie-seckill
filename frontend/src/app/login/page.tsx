@@ -24,7 +24,10 @@ export default function LoginPage() {
     try {
       const payload = await postData<AuthPayload>('/auth/login', { account, password });
       setTokens(payload);
-      router.push('/');
+      const next = typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('next')
+        : null;
+      router.push(next?.startsWith('/') ? next : '/');
     } catch (loginError) {
       setError(errorMessage(loginError, '登录失败'));
     } finally {

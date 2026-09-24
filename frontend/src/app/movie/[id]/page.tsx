@@ -10,7 +10,7 @@ import type { Cinema, Movie, Schedule } from '@/types/api';
 export default function MovieDetail({ params }: { params: { id: string } }) {
   const movieId = Number(params.id);
   const { data: movie, error: movieError } = useSWR<Movie>(`/movies/${movieId}`, getData);
-  const { data: cinemas } = useSWR<Cinema[]>('/cinemas', getData);
+  const { data: cinemas, error: cinemasError, isLoading: cinemasLoading } = useSWR<Cinema[]>('/cinemas', getData);
   const [selectedCinema, setSelectedCinema] = useState<number | null>(null);
 
   useEffect(() => {
@@ -18,7 +18,7 @@ export default function MovieDetail({ params }: { params: { id: string } }) {
   }, [cinemas, selectedCinema]);
 
   const scheduleUrl = selectedCinema ? `/schedules?movieId=${movieId}&cinemaId=${selectedCinema}` : null;
-  const { data: schedules, isLoading: schedulesLoading } = useSWR<Schedule[]>(scheduleUrl, getData);
+  const { data: schedules, error: schedulesError, isLoading: schedulesLoading } = useSWR<Schedule[]>(scheduleUrl, getData);
 
   if (movieError) return <div className="rounded-2xl bg-red-50 p-8 text-red-700">电影信息加载失败，请返回重试。</div>;
   if (!movie) return <div className="h-96 animate-pulse rounded-3xl bg-zinc-200" />;
@@ -43,6 +43,8 @@ export default function MovieDetail({ params }: { params: { id: string } }) {
           <p className="text-xs font-semibold text-red-600">SELECT CINEMA</p>
           <h2 className="mt-1 text-xl font-black">选择影院与场次</h2>
         </div>
+        {cinemasError ? <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">影院加载失败，请刷新页面重试。</p> : null}
+        {cinemasLoading ? <div className="h-16 animate-pulse rounded-xl bg-zinc-100" /> : null}
         <div className="flex gap-2 overflow-x-auto pb-2">
           {(cinemas ?? []).map((cinema) => (
             <button key={cinema.id} onClick={() => setSelectedCinema(cinema.id)}
@@ -53,6 +55,7 @@ export default function MovieDetail({ params }: { params: { id: string } }) {
           ))}
         </div>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          {schedulesError ? <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">场次加载失败，请切换影院或刷新重试。</p> : null}
           {schedulesLoading ? <div className="h-24 animate-pulse rounded-xl bg-zinc-100" /> : null}
           {(schedules ?? []).map((schedule) => (
             <Link key={schedule.id} href={`/seat/${schedule.id}`}
@@ -68,7 +71,7 @@ export default function MovieDetail({ params }: { params: { id: string } }) {
             </Link>
           ))}
         </div>
-        {!schedulesLoading && schedules?.length === 0 ? <p className="mt-6 rounded-xl bg-zinc-50 p-5 text-center text-sm text-zinc-400">该影院暂无场次</p> : null}
+        {!schedulesLoading && !schedulesError && schedules?.length === 0 ? <p className="mt-6 rounded-xl bg-zinc-50 p-5 text-center text-sm text-zinc-400">该影院暂无场次</p> : null}
       </section>
     </div>
   );

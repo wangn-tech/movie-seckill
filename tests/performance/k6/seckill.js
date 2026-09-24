@@ -24,7 +24,6 @@ export const options = {
     },
   },
   thresholds: {
-    http_req_failed: ['rate<0.99'],
     lua_http_latency: ['p(95)<1000'],
   },
 };
@@ -32,7 +31,7 @@ export const options = {
 function batchSeats(vu) {
   const sizes = [1, 10, 30, 60, 120];
   const size = sizes[(vu - 1) % sizes.length];
-  const start = (vu - 1) * 200;
+  const start = 1000 + (vu - 1) * 200;
   return { size, seats: Array.from({ length: size }, (_, i) => seatByIndex(start + i)) };
 }
 

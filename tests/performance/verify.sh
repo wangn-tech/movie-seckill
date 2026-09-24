@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-mysql_result="$(docker exec maoyan-mysql sh -c 'mysql -N -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' <<'SQL'
+mysql_result="$(docker exec -i maoyan-mysql sh -c 'mysql -N -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' <<'SQL'
 SELECT CONCAT('negative_stock=', COUNT(*)) FROM movie_schedule WHERE id=9001 AND available_seats < 0;
 SELECT CONCAT('duplicate_request=', COUNT(*)) FROM (
   SELECT lock_token FROM ticket_order WHERE schedule_id=9001 GROUP BY lock_token HAVING COUNT(*) > 1

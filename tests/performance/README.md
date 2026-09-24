@@ -13,7 +13,7 @@
 
 ## 前置准备
 1. 复制 `.env.example` 为 `.env`，执行 `bash deploy/scripts/start-demo.sh`。
-2. 使用专用压测场次 `9001`，执行前运行 `bash tests/performance/reset.sh --yes`。
+2. 使用专用压测场次 `9001`；每个写场景前运行 `bash tests/performance/reset.sh --yes`。
 3. k6 通过 Docker 接入 `maoyan-net`，不需要在宿主机安装 k6。
 
 ## 场景 1：热点读和布隆过滤

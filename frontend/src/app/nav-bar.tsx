@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store/auth';
 export default function NavBar() {
   const accessToken = useAuthStore((state) => state.accessToken);
   const nickname = useAuthStore((state) => state.nickname);
+  const hydrated = useAuthStore((state) => state.hydrated);
   const clearAuth = useAuthStore((state) => state.logout);
   const pathname = usePathname();
   const router = useRouter();
@@ -34,7 +35,9 @@ export default function NavBar() {
         <div className="ml-auto flex items-center gap-1 text-sm">
           <Link href="/" className={linkClass(pathname === '/')}>热映</Link>
           <Link href="/orders" className={linkClass(pathname === '/orders')}>订单</Link>
-          {accessToken ? (
+          {!hydrated ? (
+            <span className="h-9 w-20 animate-pulse rounded-full bg-zinc-100" aria-label="正在恢复登录状态" />
+          ) : accessToken ? (
             <>
               <span className="hidden px-2 text-zinc-400 sm:inline">{nickname || '用户'}</span>
               <button onClick={logout} className="rounded-full px-3 py-2 text-zinc-600 hover:bg-zinc-100">退出</button>

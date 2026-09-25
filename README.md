@@ -29,19 +29,19 @@
 ## 快速启动
 
 ```bash
-# 1. 启动中间件（MySQL/Redis/RocketMQ）
-cp .env.example .env
+# 1. 启动中间件（MySQL/Redis/RocketMQ；仅首次创建 .env）
+[ -f .env ] || cp .env.example .env
 bash deploy/scripts/start-infra.sh
 
-# 2. 启动后端（本地开发，连宿主机 Docker 映射端口）
+# 2. 终端 A：启动后端（本地开发，连接宿主机 Docker 映射端口）
 cd backend
-mvn spring-boot:run
+/opt/apache-maven-3.9.11/bin/mvn spring-boot:run
 # 访问 http://localhost:8080/doc.html 查看接口
 
-# 3. 启动前端
-cd ../frontend
-npm install
-npm run dev
+# 3. 终端 B（在项目根目录）：启动前端（Next.js 将 /api 代理至后端）
+cd frontend
+npm ci
+BACKEND_URL=http://localhost:8080 npm run dev
 # 访问 http://localhost:3000
 ```
 

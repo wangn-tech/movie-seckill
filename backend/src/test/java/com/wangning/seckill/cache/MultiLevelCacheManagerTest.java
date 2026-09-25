@@ -97,6 +97,23 @@ class MultiLevelCacheManagerTest {
     }
 
     @Test
+    void returnsNullCacheWithOneRedisRead() {
+        when(values.get("movie:detail:999")).thenReturn("__NULL__");
+        AtomicBoolean loaded = new AtomicBoolean(false);
+
+        Movie result = manager.get("movie:detail:999", Movie.class, 600,
+                () -> true,
+                () -> {
+                    loaded.set(true);
+                    return new Movie();
+                });
+
+        assertThat(result).isNull();
+        assertThat(loaded).isFalse();
+        verify(values, times(1)).get("movie:detail:999");
+    }
+
+    @Test
     void lockContentionUsesOneLocalDatabaseLoad() throws Exception {
         var lock = mock(org.redisson.api.RLock.class);
         when(lock.tryLock(2, 15, TimeUnit.SECONDS)).thenReturn(false);

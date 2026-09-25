@@ -73,15 +73,15 @@ public class MultiLevelCacheManager {
             return (T) l1;
         }
 
-        CacheObject<T> cached = readRedis(key, type);
-        if (cached != null) {
-            if (cached.expireAt() < System.currentTimeMillis()) {
+        RedisCacheValue<T> cached = readRedis(key, type);
+        if (cached.value() != null) {
+            if (cached.value().expireAt() < System.currentTimeMillis()) {
                 scheduleRebuild(key, type, ttlSec, loader);
             }
-            localCache.put(key, cached.data());
-            return cached.data();
+            localCache.put(key, cached.value().data());
+            return cached.value().data();
         }
-        if (NULL_FLAG.equals(redis.opsForValue().get(key))) {
+        if (cached.isNullCached()) {
             return null;
         }
 
@@ -100,7 +100,8 @@ public class MultiLevelCacheManager {
             locked = lock.tryLock(2, 15, TimeUnit.SECONDS);
             if (locked) {
                 // 获取锁后必须二次检查，其他实例可能已经完成回填。
-                CacheObject<T> latest = readRedis(key, type);
+                RedisCacheValue<T> latestValue = readRedis(key, type);
+                CacheObject<T> latest = latestValue.value();
                 if (latest != null) {
                     localCache.put(key, latest.data());
                     return latest.data();
@@ -111,7 +112,8 @@ public class MultiLevelCacheManager {
             }
 
             Thread.sleep(50);
-            CacheObject<T> latest = readRedis(key, type);
+            RedisCacheValue<T> latestValue = readRedis(key, type);
+            CacheObject<T> latest = latestValue.value();
             return latest != null ? latest.data() : loadWithSingleFlight(key, ttlSec, loader);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -187,7 +189,8 @@ public class MultiLevelCacheManager {
                 return;
             }
 
-            CacheObject<T> latest = readRedis(key, type);
+            RedisCacheValue<T> latestValue = readRedis(key, type);
+            CacheObject<T> latest = latestValue.value();
             if (latest != null && latest.expireAt() >= System.currentTimeMillis()) {
                 localCache.put(key, latest.data());
                 return;
@@ -204,19 +207,22 @@ public class MultiLevelCacheManager {
         }
     }
 
-    private <T> CacheObject<T> readRedis(String key, JavaType valueType) {
+    private <T> RedisCacheValue<T> readRedis(String key, JavaType valueType) {
         String json = redis.opsForValue().get(key);
-        if (json == null || NULL_FLAG.equals(json)) {
-            return null;
+        if (json == null) {
+            return RedisCacheValue.miss();
+        }
+        if (NULL_FLAG.equals(json)) {
+            return RedisCacheValue.nullCacheHit();
         }
         try {
             JavaType wrapperType = objectMapper.getTypeFactory()
                     .constructParametricType(CacheObject.class, valueType);
-            return objectMapper.readValue(json, wrapperType);
+            return RedisCacheValue.value(objectMapper.readValue(json, wrapperType));
         } catch (Exception e) {
             log.warn("缓存反序列化失败，删除坏数据 key={}", key, e);
             redis.delete(key);
-            return null;
+            return RedisCacheValue.miss();
         }
     }
 
@@ -226,5 +232,19 @@ public class MultiLevelCacheManager {
     }
 
     public record CacheObject<T>(T data, long expireAt) {
+    }
+
+    private record RedisCacheValue<T>(CacheObject<T> value, boolean isNullCached) {
+        private static <T> RedisCacheValue<T> value(CacheObject<T> value) {
+            return new RedisCacheValue<>(value, false);
+        }
+
+        private static <T> RedisCacheValue<T> nullCacheHit() {
+            return new RedisCacheValue<>(null, true);
+        }
+
+        private static <T> RedisCacheValue<T> miss() {
+            return new RedisCacheValue<>(null, false);
+        }
     }
 }
